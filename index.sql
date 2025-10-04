@@ -10,28 +10,11 @@ select
 
 select 
     'html' as component,
-    '<img style="width: auto, height: 200px, margin-right: auto, margin-left: auto, display: block, text-align: center" src=NASA_Hackathon_Logo.png alt="A purple cityscape with trees with the words Sustainable City Planning underneath.">' as html;
-
-/* select 'card' as component,
-    'Logo' as title,
-    'NASA_Hackathon_Logo' as image,
-    'logo-image' as id;
-
-select 'html' as component,
-    '<style>
-        #logo-image img {
-            width: auto;
-            height: auto;
-            margin-right: auto;
-            margin-left: auto;
-            display: block;
-        }
-     </style>' as html; */
+    '<img style="width: 100px, height: auto, margin-right: auto, margin-left: auto, display: block, text-align: center" src="NASA_Hackathon_Logo.png" alt="A purple cityscape with trees with the words Sustainable City Planning underneath.">' as html;
 
 SELECT 'map' AS component;
 
-select
-    'html' as component,
+SELECT 'html' as component,
         '<body>
             <h1>Header</h1>
             <p>Lorem ipsum dolor sit amet</p>

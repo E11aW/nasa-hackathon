@@ -15,13 +15,3 @@ h1 {
 p {
     color: #56556E;
 }
-
-logo-image {
-    width: auto; 
-    height: 200;
-    margin-right: auto;
-    margin-left: auto;
-    display: block;
-    text-align: center;
-    border: 4px solid pink;
-}
