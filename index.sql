@@ -5,10 +5,10 @@ select
     -110 as longitude,
     '' as attribution;
 select
-    'rectangle' as icon,
-    20 as size,
-    '{"type":"Feature", "properties": { "title":"Mvezo, Birth Place of Nelson Mandela" }, "geometry": { "type":"Point", "coordinates": [28.49, -31.96] }}' as geojson;
-
+    'Square' as title,
+    'red' as color,
+    'this is a really fun test' as description,
+    JSON('{"type":"Polygon","coordinates":[[[0,0],[0,4],[4,4],[4,0],[0,0]]]}') as geojson;
 
 select
     'html' as component,
