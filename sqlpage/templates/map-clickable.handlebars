@@ -13,39 +13,99 @@
   const zoom = {{#if zoom}}{{zoom}}{{else}}5{{/if}};
   const map  = L.map(el).setView([lat, lon], zoom);
 
-  // --- Base map layer ---
+  // ---- Base layer ----
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
+    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
   }).addTo(map);
 
-  // --- Existing pins from the database ---
-  {{#each_row}}
-    {{#if geojson}}
-      try {
-        const f = {{{geojson}}};
-        if (f?.geometry?.type === 'Point') {
-          const c = f.geometry.coordinates; // [lon, lat]
-          L.marker([c[1], c[0]]).addTo(map);
+  // Utility: build a nice popup from CAMS json payload
+  function buildCamsHTML(title, camsArray) {
+    let html = `<strong>${title || "Marker"}</strong><br/>`;
+    if (Array.isArray(camsArray) && camsArray.length) {
+      // Our marker_popup.sql returns [{"value":[{variable,value,unit,obs_time}, ...]}]
+      const rows = camsArray[0]?.value || [];
+      if (rows.length) {
+        html += `<div style="font:12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif">`;
+        html += `Latest CAMS values:<br/>`;
+        for (const r of rows) {
+          html += `${r.variable}: ${r.value} ${r.unit || ""}<br/>`;
         }
-      } catch (e) { console.error('Bad GeoJSON', e); }
-    {{/if}}
-  {{/each_row}}
+        html += `</div>`;
+      } else {
+        html += `<em>No CAMS data yet.</em>`;
+      }
+    } else {
+      html += `<em>No CAMS data yet.</em>`;
+    }
+    return html;
+  }
 
-  // --- Click to drop a pin and save it ---
+  // Add a marker from a GeoJSON Feature
+  function addMarkerFromFeature(f) {
+    if (!f || f.type !== "Feature" || !f.geometry || f.geometry.type !== "Point") return;
+    const c = f.geometry.coordinates; // [lon, lat]
+    if (!Array.isArray(c) || c.length < 2) return;
+
+    const title = (f.properties && (f.properties.title || f.properties.name)) || "Marker";
+    const mk = L.marker([c[1], c[0]]).addTo(map);
+
+    // If we have a marker id, fetch popup details (CAMS); else show a simple popup
+    const markerId = f.properties && f.properties.id;
+    if (markerId != null) {
+      mk.bindPopup(`<em>Loading data…</em>`);
+      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(markerId))
+        .then(r => r.json())
+        .then(json => mk.setPopupContent(buildCamsHTML(title, json)))
+        .catch(() => mk.setPopupContent(`<strong>${title}</strong><br/><em>No CAMS data yet.</em>`));
+    } else {
+      mk.bindPopup(`<strong>${title}</strong>`);
+    }
+    return mk;
+  }
+
+  // ---- Existing pins from the SQL query ----
+  try {
+    {{#each_row}}
+      {{#if geojson}}
+        (function(){
+          try {
+            // Expecting 'geojson' to be a full GeoJSON Feature (with properties.id if possible)
+            const f = {{{geojson}}};
+            addMarkerFromFeature(f);
+          } catch (e) { console.error('Bad GeoJSON in row', e); }
+        })();
+      {{/if}}
+    {{/each_row}}
+  } catch (e) {
+    console.error('Rendering existing markers failed', e);
+  }
+
+  // ---- Click to drop a pin and save it ----
   map.on('click', (e) => {
-    // show pin instantly
-    L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+    const { lat, lng } = e.latlng;
 
-    // save to the database through SQLPage
+    // Show a pin immediately with a "saving" popup
+    const mk = L.marker([lat, lng]).addTo(map).bindPopup('<em>Saving…</em>').openPopup();
+
+    // Save to DB through SQLPage action
     const body = new URLSearchParams();
-    body.set('latitude',  e.latlng.lat);
-    body.set('longitude', e.latlng.lng);
-    body.set('title', '');
+    body.set('latitude',  lat);
+    body.set('longitude', lng);
+    body.set('title', ''); // optional; adjust if your add_marker.sql expects a title
 
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString()
+    })
+    .then(() => {
+      // If your DB trigger enqueues a CAMS fetch, we can update the popup text now.
+      mk.setPopupContent('<strong>Marker saved.</strong><br/><em>CAMS data will appear soon.</em>');
+      // Optional: you could re-load the page or poll for popup data if you return the new marker id.
+    })
+    .catch(() => {
+      mk.setPopupContent('<strong>Save failed.</strong>');
     });
   });
 })();
