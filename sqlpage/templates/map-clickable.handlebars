@@ -1,0 +1,52 @@
+<div id="{{#if id}}{{id}}{{else}}map{{/if}}"
+     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
+
+<script nonce="{{@csp_nonce}}">
+(function boot() {
+  const elId = "{{#if id}}{{id}}{{else}}map{{/if}}";
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (typeof window.L === 'undefined') return setTimeout(boot, 30);
+
+  const lat  = {{#if latitude}}{{latitude}}{{else}}40{{/if}};
+  const lon  = {{#if longitude}}{{longitude}}{{else}}-110{{/if}};
+  const zoom = {{#if zoom}}{{zoom}}{{else}}5{{/if}};
+  const map  = L.map(el).setView([lat, lon], zoom);
+
+  // --- Base map layer ---
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
+  }).addTo(map);
+
+  // --- Existing pins from the database ---
+  {{#each_row}}
+    {{#if geojson}}
+      try {
+        const f = {{{geojson}}};
+        if (f?.geometry?.type === 'Point') {
+          const c = f.geometry.coordinates; // [lon, lat]
+          L.marker([c[1], c[0]]).addTo(map);
+        }
+      } catch (e) { console.error('Bad GeoJSON', e); }
+    {{/if}}
+  {{/each_row}}
+
+  // --- Click to drop a pin and save it ---
+  map.on('click', (e) => {
+    // show pin instantly
+    L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+
+    // save to the database through SQLPage
+    const body = new URLSearchParams();
+    body.set('latitude',  e.latlng.lat);
+    body.set('longitude', e.latlng.lng);
+    body.set('title', '');
+
+    fetch('add_marker.sql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+  });
+})();
+</script>
