@@ -15,6 +15,7 @@ body {
 
 h1 {
     color: #3C2946;
+    font-weight: 700;
 }
 
 .center {
@@ -23,7 +24,7 @@ h1 {
 
 p {
     color: #3C2946;
-    font-weight: 400;
+    font-weight: 500;
 }
 
 iframe {
@@ -75,11 +76,21 @@ img {
 
 .info-card p {
     color: #ffffff;
+    text-align: center;
+    font-weight: 500;
 }
 
 .info-card h1 {
     color: #ffffff;
     font-size: 22px;
+    text-align: center;
+}
+
+.aboutText {
+    width: 70%;
+    margin-right: auto;
+    margin-left: auto;
+    text-align: center;
 }
 
 @media screen and (max-width: 1000px) {
