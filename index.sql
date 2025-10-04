@@ -1,20 +1,17 @@
-<<<<<<< HEAD
 select
-    'map' as component,
-    5     as zoom,
-    8     as max_zoom,
-    800   as height,
-    40   as latitude,
+    'map'   as component,
+    5       as zoom,
+    8       as max_zoom,
+    800     as height,
+    40      as latitude,
     -110    as longitude,
     'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png' as tile_source,
-    ''    as attribution;
+    ''      as attribution;
 select
     'rectangle' as icon,
     20      as size;
-=======
-SELECT 'map' AS component;
 
-select 
+select
     'html' as component,
     '<header><link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,7 +19,7 @@ select
 
 select
     'html' as component,
-        '<style>
+    '<style>
             h1 {
                 font-family: "Inter", sans-serif;
             }
@@ -37,4 +34,3 @@ select
             <p>Lorem ipsum dolor sit amet</p>
             <p>Lorem ipsum dolor sit amet</p>
         </body>' as html;
->>>>>>> b8752471a95e36eb13da2b2f00eeaaf323dfdc38
