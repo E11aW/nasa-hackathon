@@ -1,15 +1,17 @@
 select
-    'map'   as component,
-    5       as zoom,
-    8       as max_zoom,
-    800     as height,
-    40      as latitude,
+    'map' as component,
+    5     as zoom,
+    8     as max_zoom,
+    800   as height,
+    40   as latitude,
     -110    as longitude,
     'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png' as tile_source,
-    ''      as attribution;
+    ''    as attribution;
 select
     'rectangle' as icon,
-    20      as size;
+    20      as size,
+    '{"type":"Feature", "properties": { "title":"Mvezo, Birth Place of Nelson Mandela" }, "geometry": { "type":"Point", "coordinates": [28.49, -31.96] }}' as geojson;
+
 
 select
     'html' as component,
