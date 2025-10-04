@@ -23,6 +23,7 @@ h1 {
 
 p {
     color: #3C2946;
+    font-weight: 400;
 }
 
 iframe {
@@ -93,5 +94,10 @@ img {
 
     .info-card {
         width: 100%;
+        display: inline-block !important;
+    }
+
+    .info-card img {
+        width: 25%;
     }
 }
