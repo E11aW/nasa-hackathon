@@ -7,7 +7,7 @@ select 'shell' as component,
 select
     'html' as component,
         '<h1>Sustainable City Planning</h1>' as html;
-
+        
 SELECT 'map' AS component;
 
 select
