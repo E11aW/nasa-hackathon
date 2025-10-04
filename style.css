@@ -43,20 +43,43 @@ img {
     border-radius: 15px;
 }
 
-.info-card {
-    width: 30%;
-    background-color: #3C2946;
-    padding: 10px;
-    margin: 10px;
-    border-radius: 10px;
+.info-card-gallery {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: row; 
+    flex-wrap: wrap;
 }
 
-.info-card p, .info-card h1 {
+.info-card {
+    background-color: #3C2946;
+    padding: 25px;
+    margin: 10px;
+    border-radius: 10px;
+    width: 25%;
+    height: auto;
+}
+
+.info-card p {
     color: #ffffff;
+}
+
+.info-card h1 {
+    color: #ffffff;
+    font-size: 22px;
 }
 
 @media screen and (max-width: 1000px) {
     .logo {
+        width: 100%;
+    }
+    
+    .info-card-gallery {
+        flex-wrap: wrap;
+        flex-direction: row;
+    }
+
+    .info-card {
         width: 100%;
     }
 }
