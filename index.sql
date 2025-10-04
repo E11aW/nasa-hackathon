@@ -8,10 +8,6 @@ select
     'html' as component,
         '<h1>Sustainable City Planning</h1>' as html;
 
-select 
-    'html' as component,
-    '<style: width="auto" height="200"> <img src=NASA_Hackathon_Logo.png alt="A purple cityscape with trees with the words Sustainable City Planning underneath.">' as html;
-
 SELECT 'map' AS component;
 
 select
