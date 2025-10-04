@@ -1,5 +1,6 @@
 body {
-    background-color: pink;
+    background-color: #ffffff;
+    font-family: 'Inter', sans-serif;
 }
 
 h1 {
@@ -12,4 +13,13 @@ p {
 
 iframe {
     border: none;
+}
+
+.logo {
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    text-align: center;
+    margin-top: -200px;
+    margin-bottom: -200px;
 }

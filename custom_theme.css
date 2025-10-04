@@ -1,7 +1,7 @@
 :root, .layout-boxed[data-bs-theme="custom_theme"] {
     --tblr-body-color: #ffffff; 
     --tblr-body-bg: #ffffff;
-    --tblr-bg-surface: #F8F8F8;
+    --tblr-bg-surface: #ffffff;
 }
 
 html {
