@@ -10,7 +10,11 @@ select
 
 select 
     'html' as component,
-    '<img style="width: 100px, height: auto, margin-right: auto, margin-left: auto, display: block, text-align: center" src="NASA_Hackathon_Logo.png" alt="A purple cityscape with trees with the words Sustainable City Planning underneath.">' as html;
+    '<img src="NASA_Hackathon_Logo.png" alt="A purple cityscape with trees with the words Sustainable City Planning underneath.">' as html;
+
+select 
+    'html' as component,
+    '<style>img {width: 100px, height: auto, margin-right: auto, margin-left: auto, display: block, text-align: center;}</style><img src="NASA_Hackathon_Logo.png" alt="A purple cityscape with trees with the words Sustainable City Planning underneath.">' as html;
 
 SELECT 'map' AS component;
 
