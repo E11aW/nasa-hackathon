@@ -2,7 +2,7 @@
 Team Members: Ella Williams, Destiny Rebman, Clayton McArthur, Abby Hoyt, and Charlotte Hoyt
 
 ## Project Name
-
+Sustainable City Planning
 ## High-Level Project Summary
 
 ## Link to Project Demo
