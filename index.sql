@@ -1,24 +1,17 @@
-SELECT 'map' AS component;
-
 select 
-    'html' as component,
-    '<header><link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet"></header>' as html;
+    'shell'                 as component,
+    'NASA International Space Apps Challenge 2025' as title,
+    'boxed'                 as layout,
+    'en-US'                 as language,
+    'Inter' as font,
+    'custom_theme.css' as css,
+    '[Check Out the GitHub](https://github.com/E11aW/nasa-hackathon)' as footer;
+
+SELECT 'map' AS component;
 
 select
     'html' as component,
-        '<style>
-            h1 {
-                font-family: "Inter", sans-serif;
-            }
-
-            p {
-                color: black;
-            }
-        </style> 
-
-        <body>
+        '<body>
             <h1>Header</h1>
             <p>Lorem ipsum dolor sit amet</p>
             <p>Lorem ipsum dolor sit amet</p>
