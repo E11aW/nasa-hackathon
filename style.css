@@ -64,6 +64,14 @@ img {
     height: auto;
 }
 
+.info-card img {
+    width: 50%;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    padding: 20px;
+}
+
 .info-card p {
     color: #ffffff;
 }
