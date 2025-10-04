@@ -1,20 +1,20 @@
 # NASA International Space Apps Challenge 2025
 Ella Williams, Destiny Rebman, Clayton McArthur, Abby Hoyt, and Charlotte Hoyt
 
-# Project Name
+## Project Name
 
-# High-Level Project Summary
+## High-Level Project Summary
 
-# Link to Project Demo
+## Link to Project Demo
 
-# Link to Project Summary
+## Link to Project Summary
 
-# Detailed Project Description
+## Detailed Project Description
 
-# NASA Data
+## NASA Data
 
-# Space Agency Partner & Other Data
+## Space Agency Partner & Other Data
 
-# Use of Artificial Intelligence
+## Use of Artificial Intelligence
 
-# Project Submission Verification
+## Project Submission Verification
