@@ -1,5 +1,5 @@
 # NASA International Space Apps Challenge 2025
-Ella Williams, Destiny Rebman, Clayton McArthur, Abby Hoyt, and Charlotte Hoyt
+Team Members: Ella Williams, Destiny Rebman, Clayton McArthur, Abby Hoyt, and Charlotte Hoyt
 
 ## Project Name
 
