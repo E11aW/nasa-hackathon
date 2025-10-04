@@ -16,10 +16,14 @@ iframe {
 }
 
 .logo {
+    width: 50%;
+    height: auto;
     margin-right: auto;
     margin-left: auto;
     display: block;
     text-align: center;
-    margin-top: -200px;
-    margin-bottom: -200px;
+    /*margin-top: -200px;
+    margin-bottom: -200px;*/
+    margin-top: -100px;
+    margin-bottom: -100px;
 }
