@@ -8,15 +8,16 @@ select
 
 select
     'html' as component,
-    '<style>h1 {color: red;  font-family: "Inter", sans-serif;}</style> <h1>HTML snippet that is safe because it is hardcoded.</h1>' as html;
+        '<style>
+            h1 {
+                font-family: "Inter", sans-serif;
+            }
 
-select
-    'html' as component,
-    '<style>p {color: black;}</style> <p>Lorem ipsum dolor sit amet</p>' as html;
+            p {
+                color: black;
+            }
+        </style> 
 
-select
-    'html' as component,
-    '<style>p {color: black;}</style> 
         <body>
             <h1>Header</h1>
             <p>Lorem ipsum dolor sit amet</p>
