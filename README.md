@@ -13,3 +13,6 @@ Our project helps urban planners make data-driven decisions in the face of clima
 - SQL for Database Management
 - Python Pipeline Script
 - SQLPage/HTML/CSS/JavaScript Frontend
+
+## Learn More
+Check out the project details for Sustainable City Planning on the [NASA Space Apps Challenge website](https://www.spaceappschallenge.org/2025/find-a-team/reach/?tab=project)!
