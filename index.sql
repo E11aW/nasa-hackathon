@@ -1,6 +1,6 @@
 SELECT
   'shell' AS component,
-  'Clickable Map' AS title,
+  '' AS title,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 

@@ -1,18 +1,24 @@
 body {
-    background-color: #ffffff;
+    background-color: #3C2946;
     font-family: 'Inter', sans-serif;
+    overflow-x: none;
 }
 
 h1 {
-    color: black;
+    color: #ffffff;
 }
 
 p {
-    color: gray;
+    color: #ffffff;
 }
 
 iframe {
     border: none;
+    border-radius: 10px;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    text-align: center;
 }
 
 .logo {
@@ -22,8 +28,23 @@ iframe {
     margin-left: auto;
     display: block;
     text-align: center;
-    /*margin-top: -200px;
-    margin-bottom: -200px;*/
-    margin-top: -100px;
-    margin-bottom: -100px;
+}
+
+img {
+    border-radius: 15px;
+}
+
+.content {
+    width: 80%;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    padding-top: 10px;
+    padding-bottom: 15px;
+}
+
+@media screen and (max-width: 1000px) {
+    .logo {
+        width: 100%;
+    }
 }
