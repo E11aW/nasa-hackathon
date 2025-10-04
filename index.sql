@@ -32,16 +32,14 @@ WITH pts AS (
     CAST(json_extract(geojson, '$.geometry.coordinates[1]') AS REAL) AS lat
   FROM markers
 ),
-stats AS (SELECT AVG(lat) AS lat, AVG(lon) AS lon FROM pts)
+stats AS (SELECT COUNT(*) AS n, AVG(lat) AS lat, AVG(lon) AS lon FROM pts)
 SELECT
-  'map-clickable' AS component,
-  700       AS height,
-  39.8283   AS latitude,
-  -98.5795  AS longitude,
-  3         AS zoom,     -- wider view to include AK/HI
-  'main-map' AS id;
-
-SELECT geojson FROM markers;
+  'map-clickable' AS component,     -- uses templates/map-clickable.handlebars
+  600              AS height,
+  COALESCE((SELECT lat FROM stats), 40)    AS latitude,
+  COALESCE((SELECT lon FROM stats), -110)  AS longitude,
+  5                AS zoom,
+  'main-map'       AS id;
 
 -- One row per marker consumed by the template. IMPORTANT: include properties.id
 SELECT
