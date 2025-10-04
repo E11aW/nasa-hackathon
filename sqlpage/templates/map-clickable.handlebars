@@ -8,9 +8,8 @@
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 30);
 
-  // ---- Initial view ----
-  const lat  = {{#if latitude}}{{latitude}}{{else}}40{{/if}};
-  const lon  = {{#if longitude}}{{longitude}}{{else}}-110{{/if}};
+  const lat  = {{#if latitude}}{{latitude}}{{else}}0.0522{{/if}};
+  const lon  = {{#if longitude}}{{longitude}}{{else}}-20.2437{{/if}};
   const zoom = {{#if zoom}}{{zoom}}{{else}}5{{/if}};
   const map  = L.map(el).setView([lat, lon], zoom);
 
