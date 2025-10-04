@@ -1,0 +1,29 @@
+body {
+    background-color: #ffffff;
+    font-family: 'Inter', sans-serif;
+}
+
+h1 {
+    color: black;
+}
+
+p {
+    color: gray;
+}
+
+iframe {
+    border: none;
+}
+
+.logo {
+    width: 50%;
+    height: auto;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    text-align: center;
+    /*margin-top: -200px;
+    margin-bottom: -200px;*/
+    margin-top: -100px;
+    margin-bottom: -100px;
+}
