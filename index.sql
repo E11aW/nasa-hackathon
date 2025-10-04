@@ -1,12 +1,12 @@
 select
     'map' as component,
-    800   as height,
-    40   as latitude,
-    -110    as longitude,
-    ''    as attribution;
+    800 as height,
+    40 as latitude,
+    -110 as longitude,
+    '' as attribution;
 select
     'rectangle' as icon,
-    20      as size,
+    20 as size,
     '{"type":"Feature", "properties": { "title":"Mvezo, Birth Place of Nelson Mandela" }, "geometry": { "type":"Point", "coordinates": [28.49, -31.96] }}' as geojson;
 
 
