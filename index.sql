@@ -1,10 +1,13 @@
+-- file: index.sql
+
+-- Load Leaflet CSS/JS
 SELECT
   'shell' AS component,
   'Clickable Map' AS title,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
--- Create table to store markers
+-- Create table (id, title, geojson) if missing
 CREATE TABLE IF NOT EXISTS markers (
   id      INTEGER PRIMARY KEY,
   title   TEXT NOT NULL,
@@ -15,14 +18,14 @@ CREATE TABLE IF NOT EXISTS markers (
   CHECK (json_extract(geojson, '$.geometry.coordinates[1]') BETWEEN  -90 AND  90)
 );
 
--- Seed one example (safe if already there)
+-- Example seed
 INSERT OR IGNORE INTO markers (id, title, geojson)
 SELECT 1, 'Mvezo, Birth Place of Nelson Mandela',
-'{"type":"Feature","properties":{"title":"Mvezo, Birth Place of Nelson Mandela"},
+'{"type":"Feature","properties":{"id":1,"title":"Mvezo, Birth Place of Nelson Mandela"},
   "geometry":{"type":"Point","coordinates":[28.49,-31.96]}}'
 WHERE NOT EXISTS (SELECT 1 FROM markers WHERE id = 1);
 
--- Compute dynamic center (fallback: 40, -110)
+-- Dynamic initial center (fallback 40, -110)
 WITH pts AS (
   SELECT
     CAST(json_extract(geojson, '$.geometry.coordinates[0]') AS REAL) AS lon,
@@ -40,19 +43,32 @@ SELECT
 
 SELECT geojson FROM markers;
 
--- Row-level data consumed by the template above
-SELECT json_valid(geojson) FROM markers;
+-- One row per marker consumed by the template. IMPORTANT: include properties.id
+SELECT
+  json_object(
+    'type','Feature',
+    'geometry', json_object(
+      'type','Point',
+      'coordinates', json_array(
+        CAST(json_extract(geojson, '$.geometry.coordinates[0]') AS REAL),
+        CAST(json_extract(geojson, '$.geometry.coordinates[1]') AS REAL)
+      )
+    ),
+    'properties', json_object(
+      'id', id,
+      'title', title
+    )
+  ) AS geojson
+FROM markers
+ORDER BY id DESC;
 
+-- A little caption
 SELECT
   'html' AS component,
-  '<link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;800&display=swap" rel="stylesheet">
-   <style>
+  '<style>
      body { font-family: Inter, system-ui, sans-serif; margin: 0; padding: 1rem; }
      h1 { margin: .5rem 0 0; font-weight: 800; }
-     p { margin: .25rem 0; color: #333; }
      .hint { color:#666; font-size:.95rem }
    </style>
    <h1>Click the map to add a marker</h1>
-   <p class="hint">A prompt will ask for a title; the point is saved to SQLite immediately.</p>' AS html;
+   <p class="hint">Values fetched from CAMS will appear in the marker popup.</p>' AS html;

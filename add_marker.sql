@@ -1,33 +1,32 @@
--- file: sqlpage/migrations/002_ghg.sql
+-- file: add_marker.sql
+-- method: POST
 
--- queue of work created when a marker is added
-CREATE TABLE IF NOT EXISTS ghg_fetch_queue (
-  id INTEGER PRIMARY KEY,
-  marker_id INTEGER NOT NULL,
-  lat REAL NOT NULL,
-  lon REAL NOT NULL,
-  enqueued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  processed_at DATETIME
-);
+WITH payload AS (
+  SELECT
+    CAST(:latitude  AS REAL) AS lat,
+    CAST(:longitude AS REAL) AS lon,
+    COALESCE(NULLIF(:title, ''), 'Marker') AS title
+)
+INSERT INTO markers (title, geojson)
+SELECT
+  title,
+  json_object(
+    'type','Feature',
+    'geometry', json_object(
+      'type','Point',
+      'coordinates', json_array(lon, lat)
+    ),
+    'properties', json_object(
+      'title', title
+    )
+  )
+FROM payload;
 
--- CAMS values stored per marker/time/variable
-CREATE TABLE IF NOT EXISTS ghg_observation (
-  id INTEGER PRIMARY KEY,
-  marker_id INTEGER NOT NULL,
-  obs_time TEXT NOT NULL,          -- ISO time from CAMS file
-  variable TEXT NOT NULL,
-  value REAL,
-  unit TEXT
-);
+-- Immediately patch properties.id to the real row id we just created
+UPDATE markers
+SET geojson = json_set(geojson, '$.properties.id', id)
+WHERE rowid = last_insert_rowid();
 
--- whenever a marker is inserted, enqueue a fetch job
-CREATE TRIGGER IF NOT EXISTS trg_markers_enqueue_ghg
-AFTER INSERT ON markers
-BEGIN
-  INSERT INTO ghg_fetch_queue (marker_id, lat, lon)
-  VALUES (
-    NEW.id,
-    CAST(json_extract(NEW.geojson, '$.geometry.coordinates[1]') AS REAL),
-    CAST(json_extract(NEW.geojson, '$.geometry.coordinates[0]') AS REAL)
-  );
-END;
+-- Return a small JSON response (optional)
+SELECT 'json' AS component,
+       json_object('ok', 1, 'marker_id', last_insert_rowid()) AS value;

@@ -1,3 +1,4 @@
+-- file: marker_popup.sql
 -- expects :marker_id
 WITH latest AS (
   SELECT variable, value, unit, obs_time

@@ -1,108 +1,127 @@
 #!/usr/bin/env python3
-import os, sqlite3, tempfile, json
+"""
+fetch_ghg.py
+Downloads CAMS (per your working request), ingests values for ONE queued marker, and marks it done.
+Run this after users add markers, or on a schedule.
+
+Requirements:
+  pip install cdsapi xarray pandas
+  # If you keep GRIB: pip install cfgrib  AND install ecCodes (e.g., brew install eccodes)
+  # Easier: request NetCDF in CAMS so xarray reads it without cfgrib.
+"""
+
+import os, sqlite3, tempfile
 from datetime import datetime
 import cdsapi
 import xarray as xr
 
-DB = os.path.join(os.path.dirname(__file__), "..", "sqlpage", "sqlpage.db")
+ROOT = os.path.dirname(__file__)
+DB   = os.path.join(ROOT, "sqlpage", "sqlpage.db")
+DATA_DIR = os.path.join(ROOT, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
 
-# Keep your ~/.cdsapirc set with your CDS key (required by cdsapi)
-
+# --- Your exact request (recommend: switch data_format to "netcdf" for simple parsing)
 DATASET = "cams-global-greenhouse-gas-forecasts"
+REQUEST = {
+    "pressure_level": ["1000"],
+    "model_level": ["137"],
+    "date": ["2025-04-04/2025-10-02"],
+    "leadtime_hour": ["0"],
+    # Change this to netcdf if you can:
+    "data_format": "netcdf",
+    "variable": [
+        "ch4_column_mean_molar_fraction",
+        "co2_column_mean_molar_fraction",
+        "total_column_carbon_monoxide",
+        "accumulated_carbon_dioxide_ecosystem_respiration",
+        "accumulated_carbon_dioxide_gross_primary_production",
+        "accumulated_carbon_dioxide_net_ecosystem_exchange",
+        "flux_of_carbon_dioxide_ecosystem_respiration",
+        "flux_of_carbon_dioxide_gross_primary_production",
+        "flux_of_carbon_dioxide_net_ecosystem_exchange",
+        "gpp_coefficient_from_biogenic_flux_adjustment_system",
+        "rec_coefficient_from_biogenic_flux_adjustment_system",
+        "land_sea_mask",
+        "carbon_dioxide",
+        "carbon_monoxide",
+        "methane"
+    ]
+}
 
-# Request a tiny bbox around each marker to keep files small (0.25° grid)
-def cams_request(lat, lon, date_from="2025-04-04", date_to="2025-10-02"):
-    dlat = 0.25
-    dlon = 0.25
-    north = lat + dlat
-    south = lat - dlat
-    west  = lon - dlon
-    east  = lon + dlon
-
-    return {
-        "date": [f"{date_from}/{date_to}"],
-        "time": ["00:00"],
-        "leadtime_hour": ["0"],
-        "type": ["forecast"],
-        "format": "grib",
-        # Some CAMS endpoints use 'area' as N/W/S/E and 'grid' as "0.25/0.25"
-        "area": [north, west, south, east],
-        "grid": "0.25/0.25",
-        # Request a tractable subset (adjust to your needs)
-        "variable": [
-            "carbon_dioxide",
-            "methane",
-            "carbon_monoxide",
-            "co2_column_mean_molar_fraction",
-            "ch4_column_mean_molar_fraction",
-            "total_column_carbon_monoxide"
-        ],
-        # A minimal pressure/model level set (var dependent, remove if unsupported)
-        "pressure_level": ["1000"],
-    }
+def open_ds(path: str):
+    try:
+        return xr.open_dataset(path)  # NetCDF path
+    except Exception:
+        # Fall back to GRIB if you used data_format="grib"
+        return xr.open_dataset(path, engine="cfgrib")
 
 def nearest_point(ds, lat, lon):
-    """Return ds at nearest lat/lon."""
-    lat_name = "latitude" if "latitude" in ds.coords else "lat"
-    lon_name = "longitude" if "longitude" in ds.coords else "lon"
+    lat_name = "latitude" if "latitude" in ds.coords else ("lat" if "lat" in ds.coords else None)
+    lon_name = "longitude" if "longitude" in ds.coords else ("lon" if "lon" in ds.coords else None)
+    if not lat_name or not lon_name:
+        raise RuntimeError("Could not find latitude/longitude coords in dataset")
     return ds.sel({lat_name: lat, lon_name: lon}, method="nearest")
 
-def save_observations(conn, marker_id, ts_iso, rows):
+def extract_timestamp(ds):
+    for k in ("valid_time","time","initial_time","forecast_reference_time"):
+        if k in ds.coords:
+            v = ds.coords[k].values
+            return str(v) if not isinstance(v, datetime) else v.isoformat()
+    return datetime.utcnow().isoformat()
+
+def write_rows(conn, marker_id, obs_time, rows):
     conn.executemany(
         "INSERT INTO ghg_observation (marker_id, obs_time, variable, value, unit) VALUES (?,?,?,?,?)",
-        [(marker_id, ts_iso, var, val, unit) for (var, val, unit) in rows]
+        [(marker_id, obs_time, var, float(val), unit) for (var, val, unit) in rows]
     )
     conn.commit()
 
-def process_one_job(conn, job):
+def process_one_job_with_ds(conn, ds, job):
     jid, marker_id, lat, lon = job
-    print(f"Fetching CAMS for marker {marker_id} at {lat},{lon}")
-    req = cams_request(lat, lon)
 
-    with tempfile.TemporaryDirectory() as d:
-        out = os.path.join(d, "cams.grib")
-        c = cdsapi.Client()
-        c.retrieve(DATASET, req).download(out)
+    # CAMS files often have time/step dims; take first slice for popup
+    d = ds
+    for dim in ("time","step"):
+        if dim in d.dims:
+            d = d.isel({dim: 0})
 
-        # Open GRIB and take the nearest grid cell to our point
-        ds = xr.open_dataset(out, engine="cfgrib")
-        # Many CAMS products carry time/step dimensions; take first time slice for demo
-        if "time" in ds.dims:
-            ds = ds.isel(time=0)
-        if "step" in ds.dims:
-            ds = ds.isel(step=0)
+    pt = nearest_point(d, lat, lon)
+    obs_time = extract_timestamp(pt)
 
-        ds_pt = nearest_point(ds, lat, lon)
+    rows = []
+    for v in pt.data_vars:
+        da = pt[v]
+        try:
+            val = float(da.values)
+        except Exception:
+            continue
+        unit = da.attrs.get("units", "")
+        rows.append((v, val, unit))
 
-        # Build rows (variable, value, unit)
-        rows = []
-        for v in ds_pt.data_vars:
-            da = ds_pt[v]
-            try:
-                val = float(da.values)
-            except Exception:
-                continue
-            unit = da.attrs.get("units", "")
-            rows.append((v, val, unit))
-
-        ts = ds_pt.coords["valid_time"].values if "valid_time" in ds_pt.coords else ds_pt.coords.get("time", datetime.utcnow()).values
-        ts_iso = str(ts) if not isinstance(ts, datetime) else ts.isoformat()
-
-        save_observations(conn, marker_id, ts_iso, rows)
+    if rows:
+        write_rows(conn, marker_id, obs_time, rows)
 
     conn.execute("UPDATE ghg_fetch_queue SET processed_at=CURRENT_TIMESTAMP WHERE id=?", (jid,))
     conn.commit()
+    print(f"Marker {marker_id}: stored {len(rows)} variables @ {obs_time}")
 
 def main():
     conn = sqlite3.connect(DB)
-    cur = conn.execute(
+    # Get one unprocessed marker job
+    row = conn.execute(
         "SELECT id, marker_id, lat, lon FROM ghg_fetch_queue WHERE processed_at IS NULL ORDER BY enqueued_at LIMIT 1"
-    )
-    row = cur.fetchone()
+    ).fetchone()
     if not row:
-        print("No jobs.")
+        print("No queued jobs.")
         return
-    process_one_job(conn, row)
+
+    # Download a fresh CAMS file (one file reused for this run)
+    out_path = os.path.join(DATA_DIR, "cams_latest.nc")  # .grib if you keep GRIB
+    c = cdsapi.Client()
+    c.retrieve(DATASET, REQUEST).download(out_path)
+
+    ds = open_ds(out_path)
+    process_one_job_with_ds(conn, ds, row)
 
 if __name__ == "__main__":
     main()
