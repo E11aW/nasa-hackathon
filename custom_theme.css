@@ -1,3 +1,15 @@
+:root, .layout-boxed[data-bs-theme="custom_theme"] {
+    --tblr-body-color: #ffffff; 
+    --tblr-text-secondary-rgb: 204, 209, 217;
+    --tblr-secondary-color: #cccccc;
+    --tblr-muted-color: rgba(191, 191, 191, 0.8);
+
+    --tblr-body-bg: #ffffff;
+    --tblr-bg-surface: #F8F8F8;
+    --tblr-bg-surface-secondary: #151a2e;
+    --tblr-bg-surface-tertiary: #191f33;
+}
+
 html {
     font-family: 'Inter', sans-serif;
 }
