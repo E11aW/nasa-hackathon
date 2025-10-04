@@ -1,15 +1,24 @@
 body {
-    background-color: #3C2946;
+    background-color: #BBD196;
     font-family: 'Inter', sans-serif;
     overflow-x: none;
 }
 
+.content {
+    width: 80%;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    padding-top: 10px;
+    padding-bottom: 15px;
+}
+
 h1 {
-    color: #ffffff;
+    color: #3C2946;
 }
 
 p {
-    color: #ffffff;
+    color: #3C2946;
 }
 
 iframe {
@@ -34,13 +43,16 @@ img {
     border-radius: 15px;
 }
 
-.content {
-    width: 80%;
-    margin-right: auto;
-    margin-left: auto;
-    display: block;
-    padding-top: 10px;
-    padding-bottom: 15px;
+.info-card {
+    width: 30%;
+    background-color: #3C2946;
+    padding: 10px;
+    margin: 10px;
+    border-radius: 10px;
+}
+
+.info-card p, .info-card h1 {
+    color: #ffffff;
 }
 
 @media screen and (max-width: 1000px) {
