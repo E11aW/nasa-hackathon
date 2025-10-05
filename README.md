@@ -2,7 +2,7 @@
 Team Members: Ella Williams, Destiny Rebman, Clayton McArthur, Abby Hoyt, and Charlotte Hoyt
 
 ## Project Name
-Sustainable City Planning
+### 🏙️ Sustainable City Planning 🏙️
 
 ## Project Summary
 Sustainable City Planning helps urban planners make data-driven decisions in the face of climate change. Users can place markers representing developments to gain insight into local and global climate impacts. This tool promotes urban expansion, sustainability, and responsible decision making. 
