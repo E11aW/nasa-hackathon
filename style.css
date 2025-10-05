@@ -146,7 +146,7 @@ img {
 
 /*Style Submission Info Text*/
 .submission-text {
-    text-align: center;
+    text-align: center !important;
 }
 
 /*Style for Mobile*/
