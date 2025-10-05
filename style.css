@@ -73,6 +73,7 @@ img {
     margin-left: auto;
     display: block;
     padding: 20px;
+    -webkit-user-drag: none;
 }
 
 .info-card p {
@@ -93,6 +94,28 @@ img {
     margin-left: auto;
     text-align: center;
     font-weight: 600;
+}
+
+.instructions {
+    background-color: #3C2946;
+    padding: 10px 25px;
+    margin: 10px;
+    border-radius: 10px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.instructions img {
+    height: 50px;
+}
+
+.instructions p {
+    width: 100%;
+    color: #ffffff;
+    padding-left: 50px;
 }
 
 @media screen and (max-width: 1000px) {
