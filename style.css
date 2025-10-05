@@ -185,6 +185,21 @@ img {
     .about-text {
         width: 90%;
     }
+
+    .instructions {
+        flex-wrap: wrap;
+        max-width: 90%;
+        padding: 20px 0px;
+    }
+
+    .instructions p {
+        padding-left: 0px;
+        text-align: center;
+    }
+
+    .instructions img {
+        height: 75px;
+    }
 }
 
 /* Leaflet: sharp tile corners, ignore global img rules*/
