@@ -18,7 +18,7 @@ Our project helps urban planners make data-driven decisions in the face of clima
 - VEMAP 2: Annual Ecosystem Model Responses to U.S. Climate Change, 1994-2100
 - ISLSCP II Sea Surface Temperature
 
-## Space Agency and Other Partner Data
+## Space Agency Partner Data
 - Agroclimatic Indicators From 1951 to 2099 Derived From Climate Projections 
 - CAMS Global Greenhouse Gas Forecast 
 
