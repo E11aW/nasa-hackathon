@@ -67,6 +67,8 @@ img {
     border-radius: 10px;
     width: 25%;
     height: auto;
+    /*box-shadow: 8px 8px #56556e;*/
+    border: 4px solid #56556e;
 }
 
 .info-card img {
@@ -101,13 +103,14 @@ img {
 .instructions {
     background-color: #3C2946;
     padding: 10px 25px;
-    margin: 10px;
+    margin: 20px;
     border-radius: 10px;
     display: inline-flex;
     justify-content: center;
     align-items: center;
     margin-right: auto;
     margin-left: auto;
+    border: 4px solid #56556e;
 }
 
 .instructions img {
@@ -118,6 +121,10 @@ img {
     width: 90%;
     color: #ffffff;
     padding-left: 50px;
+}
+
+.submission-text {
+    text-align: center;
 }
 
 @media screen and (max-width: 1000px) {
