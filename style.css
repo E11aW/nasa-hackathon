@@ -92,6 +92,7 @@ img {
     margin-right: auto;
     margin-left: auto;
     text-align: center;
+    font-weight: 600;
 }
 
 @media screen and (max-width: 1000px) {
