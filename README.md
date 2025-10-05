@@ -15,12 +15,12 @@ Our project helps urban planners make data-driven decisions in the face of clima
 - SQLPage/HTML/CSS/JavaScript Frontend
 
 ## NASA Data
-VEMAP 2: Annual Ecosystem Model Responses to U.S. Climate Change, 1994-2100
-ISLSCP II Sea Surface Temperature
+- VEMAP 2: Annual Ecosystem Model Responses to U.S. Climate Change, 1994-2100
+- ISLSCP II Sea Surface Temperature
 
 ## Space Agency and Other Partner Data
-Agroclimatic Indicators From 1951 to 2099 Derived From Climate Projections 
-CAMS Global Greenhouse Gas Forecast 
+- Agroclimatic Indicators From 1951 to 2099 Derived From Climate Projections 
+- CAMS Global Greenhouse Gas Forecast 
 
 ## Learn More
 Check out the project details for Sustainable City Planning on the [NASA Space Apps Challenge website](https://www.spaceappschallenge.org/2025/find-a-team/reach/?tab=project)!
