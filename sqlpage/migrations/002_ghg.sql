@@ -1,6 +1,6 @@
 -- file: sqlpage/migrations/002_ghg.sql
 
--- Queue: a job appears whenever a marker is created
+-- queue of work created when a marker is added
 CREATE TABLE IF NOT EXISTS ghg_fetch_queue (
   id INTEGER PRIMARY KEY,
   marker_id INTEGER NOT NULL,
@@ -10,17 +10,17 @@ CREATE TABLE IF NOT EXISTS ghg_fetch_queue (
   processed_at DATETIME
 );
 
--- Storage: one row per (marker, time, variable)
+-- CAMS values stored per marker/time/variable
 CREATE TABLE IF NOT EXISTS ghg_observation (
   id INTEGER PRIMARY KEY,
   marker_id INTEGER NOT NULL,
-  obs_time TEXT NOT NULL,
+  obs_time TEXT NOT NULL,          -- ISO time from CAMS file
   variable TEXT NOT NULL,
   value REAL,
   unit TEXT
 );
 
--- If your markers table is named "markers" (it is, per index.sql), enqueue a job on insert
+-- whenever a marker is inserted, enqueue a fetch job
 CREATE TRIGGER IF NOT EXISTS trg_markers_enqueue_ghg
 AFTER INSERT ON markers
 BEGIN
