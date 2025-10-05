@@ -7,96 +7,87 @@
 
 <script nonce="{{@csp_nonce}}">
 (function boot() {
-  const elId = "{{#if id}}{{id}}{{else}}map{{/if}}";
-  const el = document.getElementById(elId);
+  const el_id = "{{#if id}}{{id}}{{else}}map{{/if}}";
+  const el = document.getElementById(el_id);
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 30);
 
   // Initial view (override via index.sql)
-  const initLat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
-  const initLon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
-  const initZoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
-  const map = L.map(el).setView([initLat, initLon], initZoom);
+  const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
+  const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
+  const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
+  const map = L.map(el).setView([init_lat, init_lon], init_zoom);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
   }).addTo(map);
 
-  // Attach delete-on-X: capture the click on the popup's close button,
-  // stop Leaflet's default handler, remove the marker, then delete in DB.
-  function wireDeleteOnPopupX(marker, markerId) {
-    if (markerId == null) return; // only for saved markers
+  // Attach delete-on-X
+  function wire_delete_on_popup_x(marker, marker_id) {
+    if (marker_id == null) return; // only for saved markers
     marker.on('popupopen', (e) => {
-      const popupEl = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
+      const popup_el = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
       console.log('test');
-      const closeBtn = popupEl && popupEl.querySelector('.leaflet-popup-close-button');
-      if (!closeBtn) return;
+      const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
+      if (!close_button) return;
 
-      const onCloseClick = (ev) => {
-        // Intercept BEFORE Leaflet closes the popup
+      const on_close_click = (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
 
-        // Remove marker from the map immediately
         marker.remove();
-        console.log('Marker deleted: ' + markerId);
+        console.log('Marker deleted: ' + marker_id);
 
-        // Delete from DB (no page reload)
         fetch('delete_marker.sql', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ id: markerId }).toString()
+          body: new URLSearchParams({ id: marker_id }).toString()
         });
       };
 
-      // Use capture so we beat Leaflet's own click handler
-      closeBtn.addEventListener('click', onCloseClick, { once: true, capture: true });
+      close_button.addEventListener('click', on_close_click, { once: true, capture: true });
     });
   }
 
   // Add a saved marker from a GeoJSON Feature (row ID or properties.id)
-  function addSavedMarkerFromFeature(f, rowId) {
+  function add_saved_marker_from_feature(f, row_id) {
     if (!f || f.type !== "Feature" || !f.geometry || f.geometry.type !== "Point") return;
-    const c = f.geometry.coordinates; // [lon, lat]
-    if (!Array.isArray(c) || c.length < 2) return;
+    const coords = f.geometry.coordinates; // [lon, lat]
+    if (!Array.isArray(coords) || coords.length < 2) return;
 
-    const m = L.marker([c[1], c[0]]).addTo(map);
+    const m = L.marker([coords[1], coords[0]]).addTo(map);
 
-    // Keep Leaflet's default ×; keep popup stable
     m.bindPopup('<div class="popup-body">Loading…</div>', {
       closeButton: true,
       closeOnClick: false,
       autoClose: false
     });
 
-    // Prefer SQL-provided id; fallback to properties.id if set
-    const markerId = (rowId != null) ? rowId
+    const marker_id = (row_id != null) ? row_id
                    : (f.properties && typeof f.properties.id !== 'undefined' ? f.properties.id : null);
 
-    // Load your imported popup HTML exactly as returned by marker_popup.sql
-    if (markerId != null) {
-      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(markerId))
+    if (marker_id != null) {
+      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
         .then(r => r.text())
         .then(html => { const p = m.getPopup(); if (p) p.setContent(html); })
         .catch(() => { const p = m.getPopup(); if (p) p.setContent('<strong>Marker</strong>'); });
 
-      // Enable delete strictly via the popup's ×
-      wireDeleteOnPopupX(m, markerId);
+      wire_delete_on_popup_x(m, marker_id);
     }
 
     return m;
   }
 
-  // Render existing saved pins (index.sql should: SELECT id, geojson FROM markers;)
+  // Render existing saved pins (index.sql: SELECT id, geojson FROM markers;)
   try {
     {{#each_row}}
       {{#if geojson}}
         (function() {
           try {
-            const f = {{{geojson}}};                        // GeoJSON Feature
-            const rowId = {{#if id}}{{id}}{{else}}null{{/if}};
-            addSavedMarkerFromFeature(f, rowId);
+            const feature = {{{geojson}}};
+            const row_id = {{#if id}}{{id}}{{else}}null{{/if}};
+            add_saved_marker_from_feature(feature, row_id);
           } catch (e) { console.error('Bad GeoJSON row', e); }
         })();
       {{/if}}
@@ -109,12 +100,12 @@
   map.on('click', (e) => {
     const m = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
 
-    // Show a popup right away on the newly added marker
     m.bindPopup('<strong>Saved pin</strong>', {
-      closeButton: true, closeOnClick: false, autoClose: false
+      closeButton: true,
+      closeOnClick: false,
+      autoClose: false
     }).openPopup();
 
-    // Persist so it survives a later reload (deletable via × after it has an ID)
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
