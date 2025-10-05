@@ -1,3 +1,7 @@
+<div style="margin:.5rem 0;">
+  <button id="reset-map-btn" type="button">Reset Map</button>
+</div>
+
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
 
@@ -124,9 +128,7 @@
         })();
       {{/if}}
     {{/each_row}}
-  } catch (e) {
-    console.error('Rendering existing markers failed', e);
-  }
+  } catch (e) { console.error('rendering existing markers failed', e); }
 
   // Map click: add draggable marker, show coords, save, then wire DB drag persist
   map.on('click', (e) => {
