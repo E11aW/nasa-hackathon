@@ -1,11 +1,10 @@
--- 0) Load Leaflet
 SELECT
   'shell' AS component,
   '' AS title,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
--- 1) Create table (safe if already exists)
+-- Create table to store markers
 CREATE TABLE IF NOT EXISTS markers (
   id      INTEGER PRIMARY KEY,
   title   TEXT NOT NULL,
