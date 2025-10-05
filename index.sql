@@ -1,10 +1,11 @@
+-- 0) Load Leaflet
 SELECT
   'shell' AS component,
   '' AS title,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
--- Create table to store markers
+-- 1) Create table (safe if already exists)
 CREATE TABLE IF NOT EXISTS markers (
   id      INTEGER PRIMARY KEY,
   title   TEXT NOT NULL,
@@ -15,7 +16,7 @@ CREATE TABLE IF NOT EXISTS markers (
   CHECK (json_extract(geojson, '$.geometry.coordinates[1]') BETWEEN  -90 AND  90)
 );
 
--- 2) Your custom map component (blank start over the U.S.)
+-- 2) The custom map component
 SELECT
   'map-clickable' AS component,
   700       AS height,
@@ -23,7 +24,9 @@ SELECT
   -98.5795  AS longitude,
   4         AS zoom,
   'main-map' AS id;
-  
--- Start with an empty map (never auto-load saved markers)
-SELECT geojson FROM markers WHERE 1 = 0;
-SELECT json_valid(geojson) FROM markers WHERE 1 = 0;
+
+-- 3) Row data for that component
+-- CLEAN START (no markers on initial load). To show saved markers, remove WHERE 1=0.
+SELECT id AS marker_id, geojson
+FROM markers
+WHERE 1 = 0;
