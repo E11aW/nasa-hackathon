@@ -1,18 +1,39 @@
 body {
-    background-color: #ffffff;
+    background-color: #BBD196;
     font-family: 'Inter', sans-serif;
+    overflow-x: none;
+}
+
+.content {
+    width: 80%;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    padding-top: 10px;
+    padding-bottom: 15px;
 }
 
 h1 {
-    color: black;
+    color: #3C2946;
+    font-weight: 700;
+}
+
+.center {
+    text-align: center;
 }
 
 p {
-    color: gray;
+    color: #3C2946;
+    font-weight: 500;
 }
 
 iframe {
     border: none;
+    border-radius: 10px;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    text-align: center;
 }
 
 .logo {
@@ -22,8 +43,90 @@ iframe {
     margin-left: auto;
     display: block;
     text-align: center;
-    /*margin-top: -200px;
-    margin-bottom: -200px;*/
-    margin-top: -100px;
-    margin-bottom: -100px;
+}
+
+img {
+    border-radius: 15px;
+    user-select: none;
+}
+
+.info-card-gallery {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: row; 
+    flex-wrap: wrap;
+}
+
+.info-card {
+    background-color: #3C2946;
+    padding: 25px;
+    margin: 10px;
+    border-radius: 10px;
+    width: 25%;
+    height: auto;
+}
+
+.info-card img {
+    width: 50%;
+    margin-right: auto;
+    margin-left: auto;
+    display: block;
+    padding: 20px;
+}
+
+.info-card p {
+    color: #ffffff;
+    text-align: center;
+    font-weight: 500;
+}
+
+.info-card h1 {
+    color: #ffffff;
+    font-size: 22px;
+    text-align: center;
+}
+
+.about-text {
+    width: 70%;
+    margin-right: auto;
+    margin-left: auto;
+    text-align: center;
+}
+
+@media screen and (max-width: 1000px) {
+    .logo {
+        width: 100%;
+    }
+
+    .info-card-gallery {
+        flex-wrap: wrap;
+        flex-direction: row;
+    }
+
+    .info-card {
+        width: 100%;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        margin-right: auto;
+        margin-left: auto;
+    }
+
+    .info-card-text {
+        width: 75%;
+    }
+
+    .info-card-text p, .info-card-text h1 {
+        text-align: left;
+    }
+
+    .info-card img {
+        width: 20%;
+        margin: 10px;
+    }
+
+    .about-text {
+        width: 100%;
+    }
 }

@@ -1,6 +1,6 @@
 SELECT
   'shell' AS component,
-  'Clickable Map' AS title,
+  '' AS title,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
@@ -37,22 +37,8 @@ SELECT
   -98.5795  AS longitude,
   3         AS zoom,     -- wider view to include AK/HI
   'main-map' AS id;
-
+  
 SELECT geojson FROM markers;
 
 -- Row-level data consumed by the template above
 SELECT json_valid(geojson) FROM markers;
-
-SELECT
-  'html' AS component,
-  '<link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;800&display=swap" rel="stylesheet">
-   <style>
-     body { font-family: Inter, system-ui, sans-serif; margin: 0; padding: 1rem; }
-     h1 { margin: .5rem 0 0; font-weight: 800; }
-     p { margin: .25rem 0; color: #333; }
-     .hint { color:#666; font-size:.95rem }
-   </style>
-   <h1>Click the map to add a marker</h1>
-   <p class="hint">A prompt will ask for a title; the point is saved to SQLite immediately.</p>' AS html;
