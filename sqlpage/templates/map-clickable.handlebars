@@ -1,10 +1,9 @@
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
-    style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
+     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
 
 <div style="margin:.5rem 0;">
   <button style="background-color:#3C2946;border:none;margin-right:auto;margin-left:auto;display:block;padding:10px;color:white;font-family:'Inter',sans-serif;font-weight:500;border-radius:10px;margin-bottom:-35px;"
@@ -18,7 +17,7 @@
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 50);
 
-  /* === JS PATCH: give tiles a tiny overlap to hide hairline seams === */
+  /* tiny overlap patch */
   (function patchLeafletTileOverlap() {
     if (!L || !L.GridLayer) return;
     const orig = L.GridLayer.prototype._initTile;
@@ -32,78 +31,106 @@
       L.GridLayer.prototype._initTile.__overlapPatched = true;
     }
   })();
-  /* === end patch === */
 
-  // --- Map init ---
+  /* Map init */
   const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
   const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
   const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
-
-  // World bounds in Web Mercator (avoid the polar singularities)
   const WORLD_BOUNDS = L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180));
-
   const map = L.map(el, {
     minZoom: 2,
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
     maxBounds: WORLD_BOUNDS,
     maxBoundsViscosity: 1.0,
     worldCopyJump: false,
-
-    /* smoother zoom/pan */
     zoomAnimation: true,
     fadeAnimation: true,
-    zoomSnap: 0,                 // allow fractional zoom (smooth)
-    wheelDebounceTime: 20,       // more responsive wheel
-    wheelPxPerZoomLevel: 10,     // gentler step per wheel notch
+    zoomSnap: 0,
+    wheelDebounceTime: 20,
+    wheelPxPerZoomLevel: 10,
   }).setView([init_lat, init_lon], init_zoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
-    tileSize: 256,          // OSM serves 256px tiles
-    detectRetina: true,     // OK with OSM; set false if you prefer no @2x
-    noWrap: true,           // single world – no horizontal repeat
-    bounds: WORLD_BOUNDS,   // hint valid area
-    keepBuffer: 3           // keep a few rings of tiles to avoid gaps while panning
+    tileSize: 256,
+    detectRetina: true,
+    noWrap: true,
+    bounds: WORLD_BOUNDS,
+    keepBuffer: 3
   }).addTo(map);
 
-  // --- Dataset selector (affects Baseline/Scenario values) ---
+  /* State */
   let currentVariable = 'co2';
-  const dsCtrl = L.control({ position: 'topright' });
-  dsCtrl.onAdd = function() {
+  let currentMode = 'pins'; // 'pins' | 'zones'
+  let currentMonth = '07';  // SST: 01,04,07,10
+  let zonesLayer = null;
+
+  /* Controls */
+  const ctrl = L.control({ position: 'topright' });
+  ctrl.onAdd = function() {
     const div = L.DomUtil.create('div', 'leaflet-bar');
     div.style.background = 'white';
     div.style.padding = '6px 8px';
     div.style.font = '14px/1.2 Inter, system-ui, sans-serif';
     div.innerHTML = `
       <div style="font-weight:600;margin-bottom:4px;">Dataset</div>
-      <select id="dataset-select" style="width:180px;">
+      <select id="dataset-select" style="width:200px;margin-bottom:6px;">
         <option value="co2">CAMS CO₂ (Air Quality)</option>
         <option value="precip">Agroclimatic Precipitation</option>
+        <option value="sst">SST (Sea Surface Temp)</option>
       </select>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+        <label style="font-weight:600;">Mode</label>
+        <select id="mode-select" style="width:120px;">
+          <option value="pins">Pins</option>
+          <option value="zones">Zones</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+        <label style="font-weight:600;">Month</label>
+        <select id="month-select" style="width:90px;">
+          <option value="01">Jan</option>
+          <option value="04">Apr</option>
+          <option value="07" selected>Jul</option>
+          <option value="10">Oct</option>
+        </select>
+      </div>
+      <div style="font-size:12px;color:#444;margin-top:4px;">
+        Month only affects SST.
+      </div>
     `;
     L.DomEvent.disableClickPropagation(div);
     return div;
   };
-  dsCtrl.addTo(map);
-  const dsSel = document.getElementById('dataset-select');
-  if (dsSel) {
-    currentVariable = dsSel.value;
-    dsSel.addEventListener('change', () => { currentVariable = dsSel.value; });
+  ctrl.addTo(map);
+
+  const dsSel   = document.getElementById('dataset-select');
+  const modeSel = document.getElementById('mode-select');
+  const monthSel= document.getElementById('month-select');
+
+  if (dsSel)   dsSel.addEventListener('change', () => { currentVariable = dsSel.value; refreshUI(); });
+  if (modeSel) modeSel.addEventListener('change', () => { currentMode = modeSel.value; refreshUI(); });
+  if (monthSel)monthSel.addEventListener('change', () => { currentMonth = monthSel.value; if (currentMode==='zones') loadZones(); });
+
+  function refreshUI() {
+    toggleClickHandler();
+    if (currentMode === 'zones') {
+      loadZones();
+    } else {
+      clearZones();
+    }
   }
 
-  // --- Helpers for value fetch & popup rendering ---
+  /* Value fetchers */
   async function fetchBaselineAt(lat, lon) {
-    const url = `value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
-    const r = await fetch(url);
-    const j = await r.json();
-    return j.value || j;
+    let url = `value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
+    if (currentVariable === 'sst') url += `&month=${currentMonth}`;
+    const r = await fetch(url); const j = await r.json(); return j.value || j;
   }
-
   async function fetchScenarioAt(lat, lon) {
-    const url = `scenario_value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
-    const r = await fetch(url);
-    const j = await r.json();
-    return j.value || j;
+    let url = `scenario_value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
+    if (currentVariable === 'sst') url += `&month=${currentMonth}`;
+    const r = await fetch(url); const j = await r.json(); return j.value || j;
   }
 
   function coordsHTML(lat, lon) {
@@ -139,11 +166,9 @@
       const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
       if (!close_button) return;
       const on_close_click = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
+        ev.preventDefault(); ev.stopPropagation();
         if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-        marker.remove();
-        marker._deleted = true;
+        marker.remove(); marker._deleted = true;
         if (marker_id != null) {
           fetch('delete_marker.sql', {
             method: 'POST',
@@ -158,9 +183,7 @@
 
   function attachDragPersist(marker, marker_id, title) {
     marker.on('dragend', () => {
-      // 1) recompute values for new location
       refreshPopupForMarker(marker, title);
-      // 2) persist new location if we have an id
       if (marker_id != null) {
         const { lat, lng } = marker.getLatLng();
         fetch('update_marker.sql', {
@@ -172,23 +195,7 @@
     });
   }
 
-  // --- Render existing saved pins ---
-  function add_saved_marker_from_feature(f, row_marker_id) {
-    if (!f || f.type !== 'Feature' || !f.geometry || f.geometry.type !== 'Point') return;
-    const [lon, lat] = f.geometry.coordinates || [];
-    if (typeof lat !== 'number' || typeof lon !== 'number') return;
-
-    const title = (f.properties && f.properties.title) || 'Factory';
-    const m = L.marker([lat, lon], { draggable: true }).addTo(map);
-    m.bindPopup('<div class="popup-body">Loading…</div>', { closeButton:true, closeOnClick:false, autoClose:false });
-
-    // initial compute
-    refreshPopupForMarker(m, title);
-    wire_delete_on_popup_x(m, row_marker_id);
-    attachDragPersist(m, row_marker_id, title);
-    return m;
-  }
-
+  /* Render saved markers (leave as-is) */
   try {
     {{#each_row}}
       {{#if geojson}}
@@ -196,24 +203,25 @@
           try {
             const feature = {{{geojson}}};
             const row_marker_id = {{#if marker_id}}{{marker_id}}{{else}}null{{/if}};
-            add_saved_marker_from_feature(feature, row_marker_id);
+            const [lon, lat] = feature.geometry.coordinates || [];
+            const title = (feature.properties && feature.properties.title) || 'Factory';
+            const m = L.marker([lat, lon], { draggable: true }).addTo(map);
+            m.bindPopup('<div class="popup-body">Loading…</div>', { closeButton:true, closeOnClick:false, autoClose:false });
+            refreshPopupForMarker(m, title);
+            wire_delete_on_popup_x(m, row_marker_id);
+            attachDragPersist(m, row_marker_id, title);
           } catch (e) { console.error('Bad GeoJSON row', e); }
         })();
       {{/if}}
     {{/each_row}}
-  } catch (e) {
-    console.error('Rendering existing markers failed', e);
-  }
+  } catch (e) { console.error('Rendering existing markers failed', e); }
 
-  // --- Click to add new factory ---
-  map.on('click', (e) => {
+  /* Pins mode: click to add */
+  function onMapClickPins(e) {
     const { lat, lng } = e.latlng;
     const m = L.marker([lat, lng], { draggable: true }).addTo(map);
     m.bindPopup(`<div class="popup-body">Saving…</div>${coordsHTML(lat, lng)}`, { closeButton:true, closeOnClick:false, autoClose:false }).openPopup();
-
     wire_delete_on_popup_x(m, null);
-
-    // Save to DB and then compute values
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -223,35 +231,56 @@
     .then(t => {
       const match = t && t.match(/(\d+)/);
       const new_id = match ? parseInt(match[1], 10) : null;
-
       if (m._deleted) {
-        if (new_id != null) {
-          fetch('delete_marker.sql', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ id: new_id }).toString()
-          });
-        }
+        if (new_id != null) fetch('delete_marker.sql', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({ id:new_id }).toString() });
         return;
       }
-
-      // compute values for current location
       refreshPopupForMarker(m, 'Factory');
-
-      // rewire delete with id & enable DB persist on drag
       wire_delete_on_popup_x(m, new_id);
       attachDragPersist(m, new_id, 'Factory');
     })
     .catch(() => {
       m.getPopup()?.setContent(renderPopupHTML('Factory', NaN, NaN, lat, lng));
     });
+  }
+
+  function toggleClickHandler() {
+    map.off('click', onMapClickPins);
+    if (currentMode === 'pins') map.on('click', onMapClickPins);
+  }
+
+  /* Zones: draw rectangles with popups */
+  function clearZones() {
+    if (zonesLayer) { zonesLayer.remove(); zonesLayer = null; }
+  }
+
+  async function loadZones() {
+    clearZones();
+    const r = await fetch(`zones_sst.sql?month=${currentMonth}`);
+    const geo = await r.json(); // FeatureCollection
+
+    zonesLayer = L.geoJSON(geo, {
+      style: { weight: 1, opacity: 0.9, fillOpacity: 0.15 },
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties || {};
+        const name = p.name || 'Zone';
+        const avg  = (typeof p.avg_c === 'number') ? p.avg_c.toFixed(2) : '–';
+        layer.bindPopup(`
+          <div style="min-width:220px">
+            <div style="font-weight:600;margin-bottom:.25rem;">${name}</div>
+            <div><strong>Avg SST (${p.month}):</strong> ${avg} °C</div>
+          </div>
+        `);
+      }
+    }).addTo(map);
+  }
+
+  /* Reset all markers (DB) then refresh page */
+  document.getElementById('reset-map-btn')?.addEventListener('click', () => {
+    fetch('clear_markers.sql', { method: 'POST' }).then(() => location.reload()).catch(() => location.reload());
   });
 
-  // --- Reset all markers (DB) then refresh page ---
-  document.getElementById('reset-map-btn')?.addEventListener('click', () => {
-    fetch('clear_markers.sql', { method: 'POST' })
-      .then(() => location.reload())
-      .catch(() => location.reload());
-  });
+  /* Initialize */
+  toggleClickHandler();
 })();
 </script>
