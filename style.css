@@ -1,7 +1,14 @@
 body {
-    background-color: #A3B18A;
+    /*background-color: #A3B18A;*/
+    background-color: #ffffff;
     font-family: 'Inter', sans-serif;
     overflow-x: none;
+}
+
+.background {
+    background-color: #A3B18A;
+    margin: -50px;
+    padding: 50px;
 }
 
 /*Style Content Background*/
