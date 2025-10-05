@@ -3,163 +3,201 @@
 </div>
 
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
-     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
+    style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
+
+<div style="margin:.5rem 0;">
+  <button style="background-color:#3C2946;border:none;margin-right:auto;margin-left:auto;display:block;padding:10px;color:white;font-family:'Inter',sans-serif;font-weight:500;border-radius:10px;margin-bottom:-35px;"
+          id="reset-map-btn" type="button">Reset Map</button>
+</div>
 
 <script nonce="{{@csp_nonce}}">
 (function boot() {
   const el_id = "{{#if id}}{{id}}{{else}}map{{/if}}";
   const el = document.getElementById(el_id);
   if (!el) return;
-  if (typeof window.L === 'undefined') return setTimeout(boot, 30);
+  if (typeof window.L === 'undefined') return setTimeout(boot, 50);
 
-  // initial view (override via index.sql)
+  // Helpers
+  function coordsHTML(lat, lon) {
+    return `<div class="coords" style="margin-top:.25rem;font-size:.9em">
+      <strong>Latitude:</strong> ${lat.toFixed(6)}<br>
+      <strong>Longitude:</strong> ${lon.toFixed(6)}
+    </div>`;
+  }
+  function replaceOrAppendCoords(popup, lat, lon) {
+    if (!popup) return;
+    const html = popup.getContent() || '';
+    const block = coordsHTML(lat, lon);
+    popup.setContent(
+      /<div class="coords"[\s\S]*?<\/div>/.test(html)
+        ? html.replace(/<div class="coords"[\s\S]*?<\/div>/, block)
+        : html + block
+    );
+  }
+  function wire_delete_on_popup_x(marker, marker_id) {
+    marker.on('popupopen', (e) => {
+      const popup_el = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
+      const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
+      if (!close_button) return;
+
+      const on_close_click = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+        marker.remove();
+        marker._deleted = true;
+
+        if (marker_id != null) {
+          fetch('delete_marker.sql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ id: marker_id }).toString()
+          });
+        }
+      };
+      close_button.addEventListener('click', on_close_click, { once: true, capture: true });
+    });
+  }
+  function attachDragPersist(marker, marker_id) {
+    marker.on('dragend', () => {
+      const { lat, lng } = marker.getLatLng();
+      replaceOrAppendCoords(marker.getPopup(), lat, lng);
+      if (marker_id != null) {
+        fetch('update_marker.sql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            id: marker_id,
+            latitude:  lat,
+            longitude: lng
+          }).toString()
+        }).catch(() => {});
+      }
+    });
+  }
+
+  // Map init
   const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
   const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
   const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
   const map = L.map(el).setView([init_lat, init_lon], init_zoom);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
   }).addTo(map);
 
-  // ----- helpers -----
-  function set_popup_html(marker_obj, html) {
-    const p = marker_obj.getPopup && marker_obj.getPopup();
-    if (p) p.setContent(html);
-  }
+  // Add a saved marker from a GeoJSON Feature (row marker_id)
+  function add_saved_marker_from_feature(f, row_marker_id) {
+    if (!f || f.type !== 'Feature' || !f.geometry || f.geometry.type !== 'Point') return;
+    const [lon, lat] = f.geometry.coordinates || [];
+    if (typeof lat !== 'number' || typeof lon !== 'number') return;
 
-  function safe_get_marker_id(feature_obj, row_id) {
-    if (row_id != null) return row_id;
-    if (feature_obj && feature_obj.properties && typeof feature_obj.properties.id !== 'undefined') {
-      return feature_obj.properties.id;
+    const m = L.marker([lat, lon], { draggable: true }).addTo(map);
+    m.bindPopup('<div class="popup-body">Loading…</div>', {
+      closeButton: true, closeOnClick: false, autoClose: false
+    });
+
+    if (row_marker_id != null) {
+      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(row_marker_id))
+        .then(r => r.text())
+        .then(html => { const p = m.getPopup(); if (p) p.setContent(`${html}${coordsHTML(lat, lon)}`); })
+        .catch(() => { const p = m.getPopup(); if (p) p.setContent(`<strong>Marker</strong>${coordsHTML(lat, lon)}`); });
+
+      wire_delete_on_popup_x(m, row_marker_id);
+      attachDragPersist(m, row_marker_id);
+    } else {
+      wire_delete_on_popup_x(m, null);
+      const p = m.getPopup();
+      if (p) p.setContent(`<strong>Marker</strong>${coordsHTML(lat, lon)}`);
+      attachDragPersist(m, null);
     }
-    return null;
+    return m;
   }
 
-  function fetch_popup_and_set(marker_obj, marker_id) {
-    fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
-      .then(function (r) { return r.text(); })
-      .then(function (txt) {
-        // Try JSON first; else HTML
-        let json = null;
-        try { json = JSON.parse(txt); } catch (_) {}
-        if (json && Array.isArray(json) && json.length) {
-          // JSON component from SQLPage: take array[0].value (array of rows)
-          const rows = json[0].value || [];
-          let html = '<strong>Marker</strong><br/>';
-          if (rows.length) {
-            html += '<div style="font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif">Latest CAMS values:<br/>';
-            rows.forEach(function(r){
-              html += (r.variable + ': ' + r.value + ' ' + (r.unit || '') + '<br/>');
-            });
-            html += '</div>';
-          } else {
-            html += '<em>No CAMS data yet.</em>';
-          }
-          set_popup_html(marker_obj, html);
-        } else {
-          // Treat as HTML fragment (our diagnostic SQL returns HTML)
-          set_popup_html(marker_obj, txt || '<strong>Marker</strong>');
-        }
-      })
-      .catch(function () { /* keep existing popup text */ });
-  }
-
-  function add_saved_marker_from_feature(feature_obj, row_id) {
-    if (!feature_obj || feature_obj.type !== "Feature" || !feature_obj.geometry || feature_obj.geometry.type !== "Point") return;
-
-    const coords = feature_obj.geometry.coordinates; // [lon, lat]
-    if (!Array.isArray(coords) || coords.length < 2) return;
-
-    const marker_obj = L.marker([coords[1], coords[0]]).addTo(map);
-    marker_obj.bindPopup('<em>Loading…</em>');
-
-    const marker_id = safe_get_marker_id(feature_obj, row_id);
-    if (marker_id != null) {
-      fetch_popup_and_set(marker_obj, marker_id);
-    }
-    return marker_obj;
-  }
-
-  // render existing rows (index.sql MUST stream id and geojson; see snippet below)
+  // Render existing saved pins (expects SELECT marker_id, geojson FROM markers;)
   try {
     {{#each_row}}
       {{#if geojson}}
-        (function () {
+        (function() {
           try {
-            const feature_obj = {{{geojson}}};
-            const row_id = {{#if id}}{{id}}{{else}}null{{/if}};
-            add_saved_marker_from_feature(feature_obj, row_id);
-          } catch (e) { console.error('bad geojson row', e); }
+            const feature = {{{geojson}}};
+            const row_marker_id = {{#if marker_id}}{{marker_id}}{{else}}null{{/if}};
+            add_saved_marker_from_feature(feature, row_marker_id);
+          } catch (e) { console.error('Bad GeoJSON row', e); }
         })();
       {{/if}}
     {{/each_row}}
   } catch (e) { console.error('rendering existing markers failed', e); }
 
-  // click: drop, save, poll for CAMS
-  map.on('click', function (ev) {
-    const lat = ev.latlng.lat, lon = ev.latlng.lng;
-    const marker_obj = L.marker([lat, lon]).addTo(map);
-    marker_obj.bindPopup('<strong>Marker saved.</strong><br/><em>Fetching CAMS…</em>').openPopup();
+  // Map click: add draggable marker, show coords, save, then wire DB drag persist
+  map.on('click', (e) => {
+    const { lat, lng } = e.latlng;
+    const m = L.marker([lat, lng], { draggable: true }).addTo(map);
 
-    const body = new URLSearchParams();
-    body.set('latitude',  lat);
-    body.set('longitude', lon);
-    body.set('title', '');
+    m.bindPopup(
+      `<div class="popup-body">Saving…</div>${coordsHTML(lat, lng)}`,
+      { closeButton: true, closeOnClick: false, autoClose: false }
+    ).openPopup();
 
+    wire_delete_on_popup_x(m, null);
+
+    // While id is unknown, keep popup coords in sync on drag
+    const preIdDrag = () => {
+      const { lat: nlat, lng: nlon } = m.getLatLng();
+      replaceOrAppendCoords(m.getPopup(), nlat, nlon);
+    };
+    m.on('dragend', preIdDrag);
+
+    // Save to DB and get the new id back
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
+      body: new URLSearchParams({ latitude: lat, longitude: lng, title: '' }).toString()
     })
-    .then(async function (resp) {
-      if (!resp.ok) {
-        const txt = await resp.text().catch(()=> '');
-        throw new Error('http ' + resp.status + ': ' + txt);
-      }
-      let json = null; let txt = '';
-      try { json = await resp.json(); } catch (_) { try { txt = await resp.text(); } catch(e){} }
-      let new_id = (json && json.value && json.value.marker_id) ? json.value.marker_id
-                : (json && json.marker_id ? json.marker_id : null);
-      if (!new_id) {
-        const last = await fetch('marker_last.sql').then(r => r.json()).catch(()=>null);
-        new_id = last && last.value && last.value.marker_id ? last.value.marker_id : null;
-      }
-      return new_id;
-    })
-    .then(function (marker_id) {
-      if (!marker_id) return;
-      const start_ms = Date.now();
-      (function poll() {
-        fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
-          .then(function (r) { return r.text(); })
-          .then(function (txt) {
-            let json = null;
-            try { json = JSON.parse(txt); } catch (_) {}
-            if (json && Array.isArray(json) && json.length && Array.isArray(json[0].value) && json[0].value.length) {
-              set_popup_html(marker_obj, (function(){
-                return (function(rows){
-                  let h = '<strong>Marker</strong><br/><div style="font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif">Latest CAMS values:<br/>';
-                  rows.forEach(function(r){ h += (r.variable + ': ' + r.value + ' ' + (r.unit || '') + '<br/>'); });
-                  return h + '</div>';
-                })(json[0].value);
-              })());
-            } else if (txt && txt.trim().length && txt.trim() !== '[]') {
-              set_popup_html(marker_obj, txt);
-            } else if (Date.now() - start_ms < 20000) {
-              setTimeout(poll, 1500);
-            }
-          })
-          .catch(function(){ if (Date.now() - start_ms < 20000) setTimeout(poll, 1500); });
-      })();
-    })
-    .catch(function (err) {
-      console.error('add_marker.sql failed:', err);
-      set_popup_html(marker_obj, '<strong>Save failed.</strong>');
-    });
+      .then(r => r.text())
+      .then(t => {
+        const match = t && t.match(/(\d+)/);
+        const new_id = match ? parseInt(match[1], 10) : null;
+
+        if (m._deleted) {
+          if (new_id != null) {
+            fetch('delete_marker.sql', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ id: new_id }).toString()
+            });
+          }
+          return;
+        }
+
+        wire_delete_on_popup_x(m, new_id);
+
+        if (new_id != null) {
+          fetch('marker_popup.sql?marker_id=' + encodeURIComponent(new_id))
+            .then(r2 => r2.text())
+            .then(html => { const p = m.getPopup(); if (p) p.setContent(`${html}${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`); })
+            .catch(() => { const p = m.getPopup(); if (p) p.setContent(`<strong>Marker</strong>${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`); });
+        } else {
+          const p = m.getPopup();
+          if (p) p.setContent(`<strong>Marker saved</strong>${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`);
+        }
+
+        // Switch from pre-id drag to persisted drag updates
+        m.off('dragend', preIdDrag);
+        attachDragPersist(m, new_id);
+      })
+      .catch(() => {
+        const p = m.getPopup();
+        if (p) p.setContent(`<strong>Save failed</strong>${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`);
+      });
   });
 
-  var reset_btn = document.getElementById('reset-map-btn');
-  if (reset_btn) reset_btn.addEventListener('click', function () { location.reload(); });
+  // Reset all markers (DB) then refresh
+  document.getElementById('reset-map-btn')?.addEventListener('click', () => {
+    fetch('clear_markers.sql', { method: 'POST' })
+      .then(() => location.reload())
+      .catch(() => location.reload());
+  });
 })();
 </script>

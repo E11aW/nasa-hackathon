@@ -1,55 +1,57 @@
--- ==============================
--- file: marker_popup.sql
--- Usage:
---   /marker_popup.sql?marker_id=123
--- If marker_id is missing/blank, it falls back to the newest marker (MAX(id)).
--- Returns an HTML component (easy to render in the popup).
--- ==============================
+-- marker_popup.sql
+-- expects :marker_id
+-- Shows Latitude/Longitude plus Baseline vs With Factories near the marker
 
-WITH want AS (
-  SELECT CAST(
-    COALESCE(
-      NULLIF(:marker_id, ''),               -- query param if present
-      (SELECT MAX(id) FROM markers)         -- else newest marker id
-    ) AS INTEGER
-  ) AS mid
+WITH m AS (
+  SELECT
+    id AS marker_id,
+    json_extract(geojson,'$.properties.title') AS title,
+    CAST(json_extract(geojson,'$.geometry.coordinates[1]') AS REAL) AS lat,
+    CAST(json_extract(geojson,'$.geometry.coordinates[0]') AS REAL) AS lon
+  FROM markers
+  WHERE id = CAST(:marker_id AS INTEGER)
 ),
-rows AS (
-  SELECT variable, value, unit, obs_time
-  FROM ghg_observation
-  WHERE marker_id = (SELECT mid FROM want)
-  ORDER BY variable
+latest AS (
+  SELECT variable, MAX(obs_time) AS obs_time FROM ghg_surface GROUP BY variable
 ),
-cnt AS (
-  SELECT COUNT(*) AS n FROM rows
+nearest AS (
+  -- nearest baseline grid point (co2 variable; adjust if you want selection)
+  SELECT s.lat, s.lon, s.value AS baseline
+  FROM ghg_surface s
+  JOIN latest l ON l.variable = s.variable AND l.obs_time = s.obs_time
+  CROSS JOIN m
+  WHERE s.variable = 'co2'
+  ORDER BY (s.lat - m.lat)*(s.lat - m.lat) + (s.lon - m.lon)*(s.lon - m.lon)
+  LIMIT 1
+),
+scenario AS (
+  -- simple “sum of influence” at marker location across all factories
+  SELECT
+    n.baseline,
+    (
+      SELECT SUM(
+        (COALESCE(fp.strength,1.0) * 50.0) /
+        ( ((m.lat - f_lat)*(m.lat - f_lat) + (m.lon - f_lon)*(m.lon - f_lon)) * 111.0 * 111.0 + 1.0 )
+      )
+      FROM (
+        SELECT 
+          id AS f_id,
+          CAST(json_extract(geojson,'$.geometry.coordinates[1]') AS REAL) AS f_lat,
+          CAST(json_extract(geojson,'$.geometry.coordinates[0]') AS REAL) AS f_lon
+        FROM markers
+      ) F
+      LEFT JOIN factory_params fp ON fp.marker_id = F.f_id
+      CROSS JOIN m
+    ) AS delta
+  FROM nearest n
+  CROSS JOIN m
 )
 SELECT
   'html' AS component,
-  '<style>
-     .cams {font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-     .cams .row{margin:.15rem 0}
-     .cams h3{margin:0 0 .35rem;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-     .cams .meta{color:#666;font-size:12px;margin:.25rem 0 .5rem}
-   </style>
-   <div class="cams">
-     <h3>CAMS values</h3>
-     <div class="meta">marker_id=' || (SELECT mid FROM want) ||
-     ', rows=' || (SELECT n FROM cnt) || '</div>' ||
-     COALESCE(
-       (SELECT GROUP_CONCAT(
-          '' || 
-          '' || '' ||
-          '' ||
-          '' ||
-          '' ||
-          '' ||
-          '' ||
-          '' ||
-          '' ||
-          '<div class="row"><b>' || variable || '</b>: ' || value || ' ' ||
-          IFNULL(unit, '') || ' <span style="color:#666">(' || obs_time || ')</span></div>',
-          ''
-        ) FROM rows),
-       '<em>No CAMS rows for this marker.</em>'
-     )
-   || '</div>' AS html;
+  '<div style="min-width:220px">' ||
+    '<div style="font-weight:600;margin-bottom:.25rem;">' || COALESCE((SELECT title FROM m),'Factory') || '</div>' ||
+    '<hr style="margin:.5rem 0;" />' ||
+    '<div><strong>Baseline (CO₂):</strong> ' || COALESCE(printf('%.2f',(SELECT baseline FROM nearest)),'–') || '</div>' ||
+    '<div><strong>With Factories:</strong> ' || COALESCE(printf('%.2f',(SELECT baseline + COALESCE(delta,0.0) FROM scenario)),'–') || '</div>' ||
+    '<div style="font-size:.9em;color:#666;"><em>Illustrative model; plug in your CAMS/VEMAP physics as needed.</em></div>' ||
+  '</div>' AS html;
