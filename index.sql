@@ -6,7 +6,10 @@
  SELECT
    'shell' AS component,
    '' AS title,
-   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
+   ' ' AS footer,
+   'fluid' AS layout,
+   /* 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css, */
+   'style.css' as css,
    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
   -- 1) The ONLY shell, and the FIRST component-emitting SELECT
