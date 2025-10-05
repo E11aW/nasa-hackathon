@@ -1,79 +1,94 @@
+<div style="margin:.5rem 0;">
+  <button id="reset-map-btn" type="button">Reset Map</button>
+</div>
+
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
      style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
 
 <script nonce="{{@csp_nonce}}">
 (function boot() {
-  const elId = "{{#if id}}{{id}}{{else}}map{{/if}}";
-  const el = document.getElementById(elId);
+  const el_id = "{{#if id}}{{id}}{{else}}map{{/if}}";
+  const el = document.getElementById(el_id);
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 30);
 
-  const lat  = {{#if latitude}}{{latitude}}{{else}}0.0522{{/if}};
-  const lon  = {{#if longitude}}{{longitude}}{{else}}-20.2437{{/if}};
-  const zoom = {{#if zoom}}{{zoom}}{{else}}5{{/if}};
-  const map  = L.map(el).setView([lat, lon], zoom);
+  // Initial view (override via index.sql)
+  const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
+  const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
+  const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
+  const map = L.map(el).setView([init_lat, init_lon], init_zoom);
 
-  // ---- Base layer ----
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
+    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
   }).addTo(map);
 
-  // Utility: build a nice popup from CAMS json payload
-  function buildCamsHTML(title, camsArray) {
-    let html = `<strong>${title || "Marker"}</strong><br/>`;
-    if (Array.isArray(camsArray) && camsArray.length) {
-      // Our marker_popup.sql returns [{"value":[{variable,value,unit,obs_time}, ...]}]
-      const rows = camsArray[0]?.value || [];
-      if (rows.length) {
-        html += `<div style="font:12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif">`;
-        html += `Latest CAMS values:<br/>`;
-        for (const r of rows) {
-          html += `${r.variable}: ${r.value} ${r.unit || ""}<br/>`;
-        }
-        html += `</div>`;
-      } else {
-        html += `<em>No CAMS data yet.</em>`;
-      }
-    } else {
-      html += `<em>No CAMS data yet.</em>`;
-    }
-    return html;
+  // Attach delete-on-X
+  function wire_delete_on_popup_x(marker, marker_id) {
+    if (marker_id == null) return; // only for saved markers
+    marker.on('popupopen', (e) => {
+      const popup_el = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
+      console.log('test');
+      const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
+      if (!close_button) return;
+
+      const on_close_click = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+        marker.remove();
+        console.log('Marker deleted: ' + marker_id);
+
+        fetch('delete_marker.sql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ id: marker_id }).toString()
+        });
+      };
+
+      close_button.addEventListener('click', on_close_click, { once: true, capture: true });
+    });
   }
 
-  // Add a marker from a GeoJSON Feature
-  function addMarkerFromFeature(f) {
+  // Add a saved marker from a GeoJSON Feature (row ID or properties.id)
+  function add_saved_marker_from_feature(f, row_id) {
     if (!f || f.type !== "Feature" || !f.geometry || f.geometry.type !== "Point") return;
-    const c = f.geometry.coordinates; // [lon, lat]
-    if (!Array.isArray(c) || c.length < 2) return;
+    const coords = f.geometry.coordinates; // [lon, lat]
+    if (!Array.isArray(coords) || coords.length < 2) return;
 
-    const title = (f.properties && (f.properties.title || f.properties.name)) || "Marker";
-    const mk = L.marker([c[1], c[0]]).addTo(map);
+    const m = L.marker([coords[1], coords[0]]).addTo(map);
 
-    // If we have a marker id, fetch popup details (CAMS); else show a simple popup
-    const markerId = f.properties && f.properties.id;
-    if (markerId != null) {
-      mk.bindPopup(`<em>Loading data…</em>`);
-      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(markerId))
-        .then(r => r.json())
-        .then(json => mk.setPopupContent(buildCamsHTML(title, json)))
-        .catch(() => mk.setPopupContent(`<strong>${title}</strong><br/><em>No CAMS data yet.</em>`));
-    } else {
-      mk.bindPopup(`<strong>${title}</strong>`);
+    m.bindPopup('<div class="popup-body">Loading…</div>', {
+      closeButton: true,
+      closeOnClick: false,
+      autoClose: false
+    });
+
+    const marker_id = (row_id != null) ? row_id
+                   : (f.properties && typeof f.properties.id !== 'undefined' ? f.properties.id : null);
+
+    if (marker_id != null) {
+      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
+        .then(r => r.text())
+        .then(html => { const p = m.getPopup(); if (p) p.setContent(html); })
+        .catch(() => { const p = m.getPopup(); if (p) p.setContent('<strong>Marker</strong>'); });
+
+      wire_delete_on_popup_x(m, marker_id);
     }
-    return mk;
+
+    return m;
   }
 
-  // ---- Existing pins from the SQL query ----
+  // Render existing saved pins (index.sql: SELECT id, geojson FROM markers;)
   try {
     {{#each_row}}
       {{#if geojson}}
-        (function(){
+        (function() {
           try {
-            // Expecting 'geojson' to be a full GeoJSON Feature (with properties.id if possible)
-            const f = {{{geojson}}};
-            addMarkerFromFeature(f);
-          } catch (e) { console.error('Bad GeoJSON in row', e); }
+            const feature = {{{geojson}}};
+            const row_id = {{#if id}}{{id}}{{else}}null{{/if}};
+            add_saved_marker_from_feature(feature, row_id);
+          } catch (e) { console.error('Bad GeoJSON row', e); }
         })();
       {{/if}}
     {{/each_row}}
@@ -81,32 +96,30 @@
     console.error('Rendering existing markers failed', e);
   }
 
-  // ---- Click to drop a pin and save it ----
+  // Map click: drop a pin, open its popup immediately, and save (NO page reload)
   map.on('click', (e) => {
-    const { lat, lng } = e.latlng;
+    const m = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
 
-    // Show a pin immediately with a "saving" popup
-    const mk = L.marker([lat, lng]).addTo(map).bindPopup('<em>Saving…</em>').openPopup();
-
-    // Save to DB through SQLPage action
-    const body = new URLSearchParams();
-    body.set('latitude',  lat);
-    body.set('longitude', lng);
-    body.set('title', ''); // optional; adjust if your add_marker.sql expects a title
+    m.bindPopup('<strong>Saved pin</strong>', {
+      closeButton: true,
+      closeOnClick: false,
+      autoClose: false
+    }).openPopup();
 
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    })
-    .then(() => {
-      // If your DB trigger enqueues a CAMS fetch, we can update the popup text now.
-      mk.setPopupContent('<strong>Marker saved.</strong><br/><em>CAMS data will appear soon.</em>');
-      // Optional: you could re-load the page or poll for popup data if you return the new marker id.
-    })
-    .catch(() => {
-      mk.setPopupContent('<strong>Save failed.</strong>');
+      body: new URLSearchParams({
+        latitude:  e.latlng.lat,
+        longitude: e.latlng.lng,
+        title: ''
+      }).toString()
     });
+  });
+
+  // Reset button: the ONLY place we refresh the page
+  document.getElementById('reset-map-btn')?.addEventListener('click', () => {
+    location.reload();
   });
 })();
 </script>
