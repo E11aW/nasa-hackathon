@@ -24,7 +24,6 @@ SELECT
   4         AS zoom,
   'main-map' AS id;
   
-SELECT geojson FROM markers;
-
--- Row-level data consumed by the template above
-SELECT json_valid(geojson) FROM markers;
+-- Start with an empty map (never auto-load saved markers)
+SELECT geojson FROM markers WHERE 1 = 0;
+SELECT json_valid(geojson) FROM markers WHERE 1 = 0;
