@@ -1,5 +1,6 @@
 body {
-    background-color: #BBD196;
+    /*background-color: #BBD196;*/
+    background-color: #ffffff;
     font-family: 'Inter', sans-serif;
     overflow-x: none;
 }
@@ -113,7 +114,7 @@ img {
 }
 
 .instructions p {
-    width: 100%;
+    width: 90%;
     color: #ffffff;
     padding-left: 50px;
 }
