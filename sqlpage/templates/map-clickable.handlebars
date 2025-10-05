@@ -1,9 +1,10 @@
+<div id="{{#if id}}{{id}}{{else}}map{{/if}}"
+  style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;">
+</div>
+
 <div style="margin:.5rem 0;">
   <button id="reset-map-btn" type="button">Reset Map</button>
 </div>
-
-<div id="{{#if id}}{{id}}{{else}}map{{/if}}"
-     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
 
 <script nonce="{{@csp_nonce}}">
 (function boot() {
