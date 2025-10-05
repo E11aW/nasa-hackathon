@@ -165,7 +165,7 @@ img {
     }
 }
 
-/* Leaflet: sharp tile corners, ignore global img rules */
+/* Leaflet: sharp tile corners, ignore global img rules*/
 .leaflet-container img.leaflet-tile,
 .leaflet-tile { border-radius: 0 !important; }
 .leaflet-container img.leaflet-tile { max-width: none !important; }

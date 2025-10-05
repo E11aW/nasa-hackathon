@@ -1,5 +1,5 @@
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -48,10 +48,13 @@
     maxBounds: WORLD_BOUNDS,
     maxBoundsViscosity: 1.0,
     worldCopyJump: false,
-    updateWhenZooming: false, // reduce tile churn during zoom animations (helps seams)
-    // zoomSnap: 0,          // optional: allow fractional zooms
-    zoomAnimation: false,
-    fadeAnimation: false
+
+    /* smoother zoom/pan */
+    zoomAnimation: true,
+    fadeAnimation: true,
+    zoomSnap: 0,                 // allow fractional zoom (smooth)
+    wheelDebounceTime: 20,       // more responsive wheel
+    wheelPxPerZoomLevel: 10,     // gentler step per wheel notch
   }).setView([init_lat, init_lon], init_zoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
