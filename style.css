@@ -1,5 +1,4 @@
 body {
-    /*background-color: #A3B18A;*/
     background-color: #ffffff;
     font-family: 'Inter', sans-serif;
     overflow-x: none;
@@ -46,7 +45,7 @@ p {
     font-weight: 500;
 }
 
-/*Style Iframe Embed*/
+/*Style iframe Embed*/
 iframe {
     border: none;
     border-radius: 10px;
