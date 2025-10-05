@@ -73,6 +73,7 @@ img {
     margin-left: auto;
     display: block;
     padding: 20px;
+    -webkit-user-drag: none;
 }
 
 .info-card p {
