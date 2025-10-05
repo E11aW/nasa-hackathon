@@ -17,7 +17,7 @@
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 50);
 
-  /* tiny overlap patch */
+  /* Small tile overlap to hide seams */
   (function patchLeafletTileOverlap() {
     if (!L || !L.GridLayer) return;
     const orig = L.GridLayer.prototype._initTile;
@@ -33,10 +33,11 @@
   })();
 
   /* Map init */
-  const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
-  const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
-  const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
+  const init_lat  = {{#if latitude}}{{latitude}}{{else}}20{{/if}};
+  const init_lon  = {{#if longitude}}{{longitude}}{{else}}0{{/if}};
+  const init_zoom = {{#if zoom}}{{zoom}}{{else}}2.5{{/if}};
   const WORLD_BOUNDS = L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180));
+
   const map = L.map(el, {
     minZoom: 2,
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
@@ -59,11 +60,11 @@
     keepBuffer: 3
   }).addTo(map);
 
-  /* State */
-  let currentVariable = 'co2';
-  let currentMode = 'pins'; // 'pins' | 'zones'
-  let currentMonth = '07';  // SST: 01,04,07,10
-  let zonesLayer = null;
+  /* App state — default to your VEMAP seasonal dataset */
+  let currentVariable = 'vemap_sr';   // 'co2' | 'precip' | 'sst' | 'vemap_sr'
+  let currentMode     = 'pins';       // 'pins' | 'zones'
+  let currentMonth    = '07';         // '01','04','07','10' (Jan/Apr/Jul/Oct)
+  let zonesLayer = null, legendCtrl = null;
 
   /* Controls */
   const ctrl = L.control({ position: 'topright' });
@@ -74,18 +75,21 @@
     div.style.font = '14px/1.2 Inter, system-ui, sans-serif';
     div.innerHTML = `
       <div style="font-weight:600;margin-bottom:4px;">Dataset</div>
-      <select id="dataset-select" style="width:200px;margin-bottom:6px;">
+      <select id="dataset-select" style="width:220px;margin-bottom:6px;">
         <option value="co2">CAMS CO₂ (Air Quality)</option>
         <option value="precip">Agroclimatic Precipitation</option>
         <option value="sst">SST (Sea Surface Temp)</option>
+        <option value="vemap_sr" selected>VEMAP Scenario (SR_OSU)</option>
       </select>
+
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
         <label style="font-weight:600;">Mode</label>
         <select id="mode-select" style="width:120px;">
-          <option value="pins">Pins</option>
+          <option value="pins" selected>Pins</option>
           <option value="zones">Zones</option>
         </select>
       </div>
+
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
         <label style="font-weight:600;">Season</label>
         <select id="month-select" style="width:90px;">
@@ -95,8 +99,13 @@
           <option value="10">Fall</option>
         </select>
       </div>
+
       <div style="font-size:12px;color:#444;margin-top:4px;">
+<<<<<<< HEAD
         Season only affects SST.
+=======
+        Month affects <strong>SST</strong> and <strong>VEMAP</strong>.
+>>>>>>> 248c8d2 (Added 2nd dataset)
       </div>
     `;
     L.DomEvent.disableClickPropagation(div);
@@ -104,33 +113,77 @@
   };
   ctrl.addTo(map);
 
-  const dsSel   = document.getElementById('dataset-select');
-  const modeSel = document.getElementById('mode-select');
-  const monthSel= document.getElementById('month-select');
+  const dsSel    = document.getElementById('dataset-select');
+  const modeSel  = document.getElementById('mode-select');
+  const monthSel = document.getElementById('month-select');
+
+  if (dsSel)    dsSel.value    = currentVariable;
+  if (modeSel)  modeSel.value  = currentMode;
+  if (monthSel) monthSel.value = currentMonth;
 
   if (dsSel)   dsSel.addEventListener('change', () => { currentVariable = dsSel.value; refreshUI(); });
   if (modeSel) modeSel.addEventListener('change', () => { currentMode = modeSel.value; refreshUI(); });
-  if (monthSel)monthSel.addEventListener('change', () => { currentMonth = monthSel.value; if (currentMode==='zones') loadZones(); });
+  if (monthSel)monthSel.addEventListener('change', () => {
+    currentMonth = monthSel.value;
+    if (currentMode === 'zones' && currentVariable === 'sst') loadZones();
+  });
 
-  function refreshUI() {
-    toggleClickHandler();
-    if (currentMode === 'zones') {
-      loadZones();
-    } else {
-      clearZones();
+  /* Choropleth (SST zones only) */
+  const breaks = [-2, 0, 5, 10, 15, 20, 25, 30];
+  const colors = ['#313695','#4575b4','#74add1','#abd9e9','#e0f3f8','#fee090','#fdae61','#f46d43','#d73027'];
+  function getColor(v) {
+    if (v == null || isNaN(v)) return '#999999';
+    for (let i = breaks.length - 1; i >= 0; i--) {
+      if (v >= breaks[i]) return colors[i+1] || colors[colors.length-1];
     }
+    return colors[0];
+  }
+  function addLegend() {
+    removeLegend();
+    legendCtrl = L.control({ position: 'bottomright' });
+    legendCtrl.onAdd = function () {
+      const div = L.DomUtil.create('div', 'info legend');
+      Object.assign(div.style, {background:'white',padding:'8px 10px',borderRadius:'8px',boxShadow:'0 1px 6px rgba(0,0,0,0.2)',font:'12px/1.2 Inter, system-ui, sans-serif'});
+      let html = '<div style="font-weight:600;margin-bottom:6px;">Avg SST (°C)</div>';
+      for (let i = 0; i < breaks.length; i++) {
+        const from = breaks[i], to = breaks[i+1], color = colors[i+1] || colors[colors.length-1];
+        html += `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">
+                   <span style="display:inline-block;width:18px;height:12px;background:${color};border:1px solid rgba(0,0,0,.2)"></span>
+                   <span>${from}${to != null ? '–'+to : '+'}</span>
+                 </div>`;
+      }
+      div.innerHTML = html;
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    };
+    legendCtrl.addTo(map);
+  }
+  function removeLegend(){ if (legendCtrl) { legendCtrl.remove(); legendCtrl=null; } }
+
+  /* Fetch helpers (plain JSON endpoints) */
+  async function fetchBaselineAt(lat, lon) {
+    let url;
+    if (currentVariable === 'vemap_sr') {
+      // Your seasonal scenario table (SR_OSU) with month code
+      url = `vemap_scn_value_at.sql?lat=${lat}&lon=${lon}&scenario=SR_OSU&var=sr&month=${currentMonth}`;
+    } else {
+      url = `value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
+      if (currentVariable === 'sst') url += `&month=${currentMonth}`;
+    }
+    const j = await (await fetch(url)).json();
+    return j; // { baseline: number|null }
   }
 
-  /* Value fetchers */
-  async function fetchBaselineAt(lat, lon) {
-    let url = `value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
-    if (currentVariable === 'sst') url += `&month=${currentMonth}`;
-    const r = await fetch(url); const j = await r.json(); return j.value || j;
-  }
   async function fetchScenarioAt(lat, lon) {
+    if (currentVariable === 'vemap_sr') {
+      // mirror baseline for “With Factories” line (or change if you add a true scenario later)
+      const j = await (await fetch(`vemap_scn_value_at.sql?lat=${lat}&lon=${lon}&scenario=SR_OSU&var=sr&month=${currentMonth}`)).json();
+      return { scenario: j && j.baseline != null ? j.baseline : null };
+    }
     let url = `scenario_value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
     if (currentVariable === 'sst') url += `&month=${currentMonth}`;
-    const r = await fetch(url); const j = await r.json(); return j.value || j;
+    const j = await (await fetch(url)).json();
+    return j; // { scenario: number|null }
   }
 
   function coordsHTML(lat, lon) {
@@ -141,10 +194,11 @@
   }
 
   function renderPopupHTML(title, baseline, scenario, lat, lon) {
+    const label = (currentVariable === 'vemap_sr') ? 'Value' : `Baseline (${currentVariable.toUpperCase()})`;
     return `
       <div style="min-width:220px">
-        <div style="font-weight:600;margin-bottom:.25rem;">${title ?? 'Factory'}</div>
-        <div><strong>Baseline (${currentVariable.toUpperCase()}):</strong> ${Number.isFinite(baseline)? baseline.toFixed(2) : '–'}</div>
+        <div style="font-weight:600;margin-bottom:.25rem;">${title ?? 'Point'}</div>
+        <div><strong>${label}:</strong> ${Number.isFinite(baseline)? baseline.toFixed(2) : '–'}</div>
         <div><strong>With Factories:</strong> ${Number.isFinite(scenario)? scenario.toFixed(2) : '–'}</div>
         ${coordsHTML(lat, lon)}
       </div>`;
@@ -160,42 +214,7 @@
     }
   }
 
-  function wire_delete_on_popup_x(marker, marker_id) {
-    marker.on('popupopen', (e) => {
-      const popup_el = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
-      const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
-      if (!close_button) return;
-      const on_close_click = (ev) => {
-        ev.preventDefault(); ev.stopPropagation();
-        if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-        marker.remove(); marker._deleted = true;
-        if (marker_id != null) {
-          fetch('delete_marker.sql', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ id: marker_id }).toString()
-          });
-        }
-      };
-      close_button.addEventListener('click', on_close_click, { once: true, capture: true });
-    });
-  }
-
-  function attachDragPersist(marker, marker_id, title) {
-    marker.on('dragend', () => {
-      refreshPopupForMarker(marker, title);
-      if (marker_id != null) {
-        const { lat, lng } = marker.getLatLng();
-        fetch('update_marker.sql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ id: marker_id, latitude: lat, longitude: lng }).toString()
-        }).catch(()=>{});
-      }
-    });
-  }
-
-  /* Render saved markers (leave as-is) */
+  /* Existing saved pins (if any) */
   try {
     {{#each_row}}
       {{#if geojson}}
@@ -204,83 +223,130 @@
             const feature = {{{geojson}}};
             const row_marker_id = {{#if marker_id}}{{marker_id}}{{else}}null{{/if}};
             const [lon, lat] = feature.geometry.coordinates || [];
-            const title = (feature.properties && feature.properties.title) || 'Factory';
+            const title = (feature.properties && feature.properties.title) || 'Point';
             const m = L.marker([lat, lon], { draggable: true }).addTo(map);
             m.bindPopup('<div class="popup-body">Loading…</div>', { closeButton:true, closeOnClick:false, autoClose:false });
             refreshPopupForMarker(m, title);
-            wire_delete_on_popup_x(m, row_marker_id);
-            attachDragPersist(m, row_marker_id, title);
-          } catch (e) { console.error('Bad GeoJSON row', e); }
+
+            m.on('popupopen', (e) => {
+              const btn = (e.popup.getElement?.() || e.popup._container).querySelector('.leaflet-popup-close-button');
+              if (!btn) return;
+              btn.addEventListener('click', (ev) => {
+                ev.preventDefault(); ev.stopPropagation(); m.remove();
+                if (row_marker_id != null) {
+                  fetch('delete_marker.sql', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                    body: new URLSearchParams({ id: row_marker_id }).toString()
+                  });
+                }
+              }, { once:true, capture:true });
+            });
+
+            m.on('dragend', () => {
+              refreshPopupForMarker(m, title);
+              if (row_marker_id != null) {
+                const { lat, lng } = m.getLatLng();
+                fetch('update_marker.sql', {
+                  method: 'POST',
+                  headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                  body: new URLSearchParams({ id: row_marker_id, latitude: lat, longitude: lng }).toString()
+                });
+              }
+            });
+          } catch {}
         })();
       {{/if}}
     {{/each_row}}
-  } catch (e) { console.error('Rendering existing markers failed', e); }
+  } catch {}
 
   /* Pins mode: click to add */
   function onMapClickPins(e) {
     const { lat, lng } = e.latlng;
     const m = L.marker([lat, lng], { draggable: true }).addTo(map);
     m.bindPopup(`<div class="popup-body">Saving…</div>${coordsHTML(lat, lng)}`, { closeButton:true, closeOnClick:false, autoClose:false }).openPopup();
-    wire_delete_on_popup_x(m, null);
+
     fetch('add_marker.sql', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
       body: new URLSearchParams({ latitude: lat, longitude: lng, title: '' }).toString()
     })
     .then(r => r.text())
     .then(t => {
       const match = t && t.match(/(\d+)/);
       const new_id = match ? parseInt(match[1], 10) : null;
-      if (m._deleted) {
-        if (new_id != null) fetch('delete_marker.sql', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({ id:new_id }).toString() });
-        return;
-      }
-      refreshPopupForMarker(m, 'Factory');
-      wire_delete_on_popup_x(m, new_id);
-      attachDragPersist(m, new_id, 'Factory');
+
+      // enable delete + drag persist
+      m.on('popupopen', (e) => {
+        const btn = (e.popup.getElement?.() || e.popup._container).querySelector('.leaflet-popup-close-button');
+        if (!btn) return;
+        btn.addEventListener('click', (ev) => {
+          ev.preventDefault(); ev.stopPropagation(); m.remove();
+          if (new_id != null) {
+            fetch('delete_marker.sql', {
+              method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+              body:new URLSearchParams({ id:new_id }).toString()
+            });
+          }
+        }, { once:true, capture:true });
+      });
+
+      m.on('dragend', () => {
+        refreshPopupForMarker(m, 'Point');
+        if (new_id != null) {
+          const { lat, lng } = m.getLatLng();
+          fetch('update_marker.sql', {
+            method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body:new URLSearchParams({ id:new_id, latitude: lat, longitude: lng }).toString()
+          });
+        }
+      });
+
+      // compute initial values
+      refreshPopupForMarker(m, 'Point');
     })
-    .catch(() => {
-      m.getPopup()?.setContent(renderPopupHTML('Factory', NaN, NaN, lat, lng));
-    });
+    .catch(() => m.getPopup()?.setContent(renderPopupHTML('Point', NaN, NaN, lat, lng)));
   }
 
   function toggleClickHandler() {
     map.off('click', onMapClickPins);
     if (currentMode === 'pins') map.on('click', onMapClickPins);
+    if (currentMode === 'zones' && currentVariable === 'sst') {
+      loadZones();
+    } else {
+      clearZones();
+    }
   }
 
-  /* Zones: draw rectangles with popups */
-  function clearZones() {
-    if (zonesLayer) { zonesLayer.remove(); zonesLayer = null; }
-  }
-
+  /* SST Zones overlay */
+  function clearZones(){ if (zonesLayer) { zonesLayer.remove(); zonesLayer=null; } removeLegend(); }
   async function loadZones() {
     clearZones();
-    const r = await fetch(`zones_sst.sql?month=${currentMonth}`);
-    const geo = await r.json(); // FeatureCollection
-
+    const geo = await (await fetch(`zones_sst.sql?month=${currentMonth}`)).json();
     zonesLayer = L.geoJSON(geo, {
-      style: { weight: 1, opacity: 0.9, fillOpacity: 0.15 },
+      style: f => ({ weight:1, color:'rgba(0,0,0,.6)', fillColor:getColor(f?.properties?.avg_c), fillOpacity:0.45 }),
       onEachFeature: (feature, layer) => {
         const p = feature.properties || {};
-        const name = p.name || 'Zone';
-        const avg  = (typeof p.avg_c === 'number') ? p.avg_c.toFixed(2) : '–';
         layer.bindPopup(`
           <div style="min-width:220px">
-            <div style="font-weight:600;margin-bottom:.25rem;">${name}</div>
-            <div><strong>Avg SST (${p.month}):</strong> ${avg} °C</div>
+            <div style="font-weight:600;margin-bottom:.25rem;">${p.name || 'Ocean'}</div>
+            <div><strong>Avg SST (${p.month}):</strong> ${p.avg_c != null ? Number(p.avg_c).toFixed(2) : '–'} °C</div>
           </div>
         `);
       }
     }).addTo(map);
+    addLegend();
   }
 
-  /* Reset all markers (DB) then refresh page */
+  /* Reset markers */
   document.getElementById('reset-map-btn')?.addEventListener('click', () => {
-    fetch('clear_markers.sql', { method: 'POST' }).then(() => location.reload()).catch(() => location.reload());
+    fetch('clear_markers.sql', { method: 'POST' })
+      .then(() => location.reload())
+      .catch(() => location.reload());
   });
 
-  /* Initialize */
+  /* Init */
   toggleClickHandler();
+  // If you want zones visible on load when SST is selected by default, set currentVariable='sst' and currentMode='zones' above.
 })();
 </script>
