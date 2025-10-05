@@ -1,13 +1,19 @@
-<div style="margin:.5rem 0;">
-  <button id="reset-map-btn" type="button">Reset Map</button>
+<div style="margin:.5rem 0; display:flex; gap:.5rem; justify-content:center; flex-wrap:wrap">
+  <button id="toggle-continents-btn" type="button"
+          style="background-color:#166534;border:none;padding:10px 14px;color:white;font-family:'Inter',sans-serif;font-weight:600;border-radius:10px">
+    Hide Continents
+  </button>
+  <button id="reset-map-btn" type="button"
+          style="background-color:#3C2946;border:none;padding:10px 14px;color:white;font-family:'Inter',sans-serif;font-weight:600;border-radius:10px">
+    Clear Map
+  </button>
 </div>
 
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
-    style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
-
-<div style="margin:.5rem 0;">
-  <button style="background-color:#3C2946;border:none;margin-right:auto;margin-left:auto;display:block;padding:10px;color:white;font-family:'Inter',sans-serif;font-weight:500;border-radius:10px;margin-bottom:-35px;"
-          id="reset-map-btn" type="button">Reset Map</button>
+     style="position:relative;height: {{#if height}}{{height}}{{else}}600{{/if}}px;">
+  <div id="legend-continents"
+       style="position:absolute;bottom:18px;right:18px;background:rgba(255,255,255,.92);padding:.5rem .75rem;border-radius:8px;font:12px/1.2 Inter,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:1000;display:none;">
+  </div>
 </div>
 
 <script nonce="{{@csp_nonce}}">
@@ -15,7 +21,7 @@
   const el_id = "{{#if id}}{{id}}{{else}}map{{/if}}";
   const el = document.getElementById(el_id);
   if (!el) return;
-  if (typeof window.L === 'undefined') return setTimeout(boot, 50);
+  if (typeof window.L === 'undefined') { setTimeout(boot, 50); return; }
 
   // Helpers
   function coordsHTML(lat, lon) {
@@ -28,32 +34,23 @@
     if (!popup) return;
     const html = popup.getContent() || '';
     const block = coordsHTML(lat, lon);
-    popup.setContent(
-      /<div class="coords"[\s\S]*?<\/div>/.test(html)
-        ? html.replace(/<div class="coords"[\s\S]*?<\/div>/, block)
-        : html + block
-    );
+    popup.setContent(/<div class="coords"[\s\S]*?<\/div>/.test(html)
+      ? html.replace(/<div class="coords"[\s\S]*?<\/div>/, block)
+      : html + block);
   }
   function wire_delete_on_popup_x(marker, marker_id) {
     marker.on('popupopen', (e) => {
       const popup_el = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
       const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
       if (!close_button) return;
-
       const on_close_click = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
+        ev.preventDefault(); ev.stopPropagation();
         if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-
-        marker.remove();
-        marker._deleted = true;
-
+        marker.remove(); marker._deleted = true;
         if (marker_id != null) {
-          fetch('delete_marker.sql', {
-            method: 'POST',
+          fetch('delete_marker.sql', { method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ id: marker_id }).toString()
-          });
+            body: new URLSearchParams({ id: marker_id }).toString() });
         }
       };
       close_button.addEventListener('click', on_close_click, { once: true, capture: true });
@@ -65,13 +62,8 @@
       replaceOrAppendCoords(marker.getPopup(), lat, lng);
       if (marker_id != null) {
         fetch('update_marker.sql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            id: marker_id,
-            latitude:  lat,
-            longitude: lng
-          }).toString()
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ id: marker_id, latitude: lat, longitude: lng }).toString()
         }).catch(() => {});
       }
     });
@@ -80,124 +72,157 @@
   // Map init
   const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
   const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
-  const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
+  const init_zoom = {{#if zoom}}{{zoom}}{{else}}3{{/if}};
   const map = L.map(el).setView([init_lat, init_lon], init_zoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
   }).addTo(map);
 
-  // Add a saved marker from a GeoJSON Feature (row marker_id)
-  function add_saved_marker_from_feature(f, row_marker_id) {
-    if (!f || f.type !== 'Feature' || !f.geometry || f.geometry.type !== 'Point') return;
-    const [lon, lat] = f.geometry.coordinates || [];
-    if (typeof lat !== 'number' || typeof lon !== 'number') return;
+  // Continents overlay (uses the freshest variable snapshot in ghg_surface)
+  let continentsLayer = null;
+  let continentsVisible = false;
 
-    const m = L.marker([lat, lon], { draggable: true }).addTo(map);
-    m.bindPopup('<div class="popup-body">Loading…</div>', {
-      closeButton: true, closeOnClick: false, autoClose: false
-    });
-
-    if (row_marker_id != null) {
-      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(row_marker_id))
-        .then(r => r.text())
-        .then(html => { const p = m.getPopup(); if (p) p.setContent(`${html}${coordsHTML(lat, lon)}`); })
-        .catch(() => { const p = m.getPopup(); if (p) p.setContent(`<strong>Marker</strong>${coordsHTML(lat, lon)}`); });
-
-      wire_delete_on_popup_x(m, row_marker_id);
-      attachDragPersist(m, row_marker_id);
-    } else {
-      wire_delete_on_popup_x(m, null);
-      const p = m.getPopup();
-      if (p) p.setContent(`<strong>Marker</strong>${coordsHTML(lat, lon)}`);
-      attachDragPersist(m, null);
+  function ramp(t){
+    if(!Number.isFinite(t)) t=.5;
+    t=Math.max(0,Math.min(1,t));
+    const r=Math.round(255*t), g=Math.round(200*(1-Math.abs(t-.5)*2)), b=Math.round(255*(1-t));
+    return `rgb(${r},${g},${b})`;
+  }
+  function setLegend(min,max,label){
+    const box=document.getElementById('legend-continents'); if(!box) return;
+    if(!continentsVisible){ box.style.display='none'; return; }
+    box.style.display='block';
+    if(!Number.isFinite(min)||!Number.isFinite(max)||min===max){min=0;max=1;}
+    const title = `Avg ${(label||'value').toUpperCase()} (Continents)`;
+    let html = `<div style="font-weight:600;margin-bottom:4px;">${title}</div>`;
+    for(let i=0;i<=5;i++){const t=i/5, v=min+t*(max-min);
+      html+=`<div style="display:flex;align-items:center;gap:.5rem;margin:.15rem 0;">
+        <span style="width:18px;height:12px;display:inline-block;background:${ramp(t)};"></span>
+        <span>${Number.isFinite(v)?v.toFixed(2):'–'}</span>
+      </div>`;}
+    box.innerHTML=html;
+  }
+  function addContinents(fc){
+    const feats=Array.isArray(fc?.features)?fc.features:[];
+    const variableName = feats[0]?.properties?.variable || 'value';
+    const numeric=feats.map(f=>Number(f?.properties?.avg)).filter(Number.isFinite);
+    let min=Math.min(...numeric), max=Math.max(...numeric);
+    if(!Number.isFinite(min)||!Number.isFinite(max)||min===max){min=0;max=1;}
+    function style(feat){const v=Number(feat?.properties?.avg);
+      const t=Number.isFinite(v)?(v-min)/(max-min):.5;
+      return { fillColor:ramp(t), fillOpacity:Number.isFinite(v)?.35:.12, color:'#333', weight:1 }; }
+    function onEach(feat,layer){
+      const p=feat?.properties||{}, avg=Number(p.avg);
+      layer.bindTooltip(
+        `<b>${p.name||'Region'}</b><br>Avg ${variableName.toUpperCase()}: <b>${Number.isFinite(avg)?avg.toFixed(2):'n/a'}</b>`,
+        {sticky:true,direction:'top'}
+      );
+      layer.on('click',()=>{const minv=Number(p.min),maxv=Number(p.max);
+        layer.bindPopup(`<div style="font-family:Inter,sans-serif">
+          <div style="font-weight:600;margin-bottom:.25rem;">${p.name||'Region'}</div>
+          <div><b>Average ${variableName.toUpperCase()}:</b> ${Number.isFinite(avg)?avg.toFixed(3):'n/a'}</div>
+          <div><b>Min:</b> ${Number.isFinite(minv)?minv.toFixed(3):'n/a'}</div>
+          <div><b>Max:</b> ${Number.isFinite(maxv)?maxv.toFixed(3):'n/a'}</div>
+          <div><b>Samples:</b> ${p.count??'n/a'}</div>
+        </div>`).openPopup();});
     }
-    return m;
+    const pane='continents'; if(!map.getPane(pane)){const p=map.createPane(pane); p.style.zIndex=340;}
+    if(continentsLayer){map.removeLayer(continentsLayer);continentsLayer=null;}
+    continentsLayer=L.geoJSON(fc,{style,onEachFeature:onEach,pane}).addTo(map);
+    continentsVisible=true; setLegend(min,max,variableName);
+    document.getElementById('toggle-continents-btn').textContent='Hide Continents';
+  }
+  function removeContinents(){ if(continentsLayer){map.removeLayer(continentsLayer);continentsLayer=null;}
+    continentsVisible=false; setLegend(0,1);
+    document.getElementById('toggle-continents-btn').textContent='Show Continents'; }
+
+  // tolerant JSON parser (handles text/html wrapper)
+  function parseMaybeJSON(text){
+    try { return JSON.parse(text); } catch(_){}
+    const s=text.indexOf('{'), e=text.lastIndexOf('}');
+    if(s>=0 && e>s){ try { return JSON.parse(text.slice(s,e+1)); } catch(_){ } }
+    throw new Error('Not JSON');
   }
 
-  // Render existing saved pins (expects SELECT marker_id, geojson FROM markers;)
+  function loadContinents(){
+    const url = 'continents_overlay.sql';
+    fetch(url).then(async r=>{
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const body=await r.text();
+      const fc=parseMaybeJSON(body);
+      if(!fc?.features?.length){ alert('No overlay data returned (check ghg_surface has rows).'); return; }
+      addContinents(fc);
+    }).catch(err=>{
+      console.error('Continents load failed:',err);
+      alert('Could not load continent overlay. Ensure continents_overlay.sql exists and ghg_surface has data.');
+    });
+  }
+
+  // Load + toggle
+  loadContinents();
+  document.getElementById('toggle-continents-btn')?.addEventListener('click', ()=>{ if(continentsVisible) removeContinents(); else loadContinents(); });
+
+  // Render existing saved markers
   try {
     {{#each_row}}
       {{#if geojson}}
-        (function() {
-          try {
-            const feature = {{{geojson}}};
-            const row_marker_id = {{#if marker_id}}{{marker_id}}{{else}}null{{/if}};
-            add_saved_marker_from_feature(feature, row_marker_id);
-          } catch (e) { console.error('Bad GeoJSON row', e); }
+        (function(){
+          try{
+            const feature={{{geojson}}};
+            const row_marker_id={{#if marker_id}}{{marker_id}}{{else}}null{{/if}};
+            const coords=feature?.geometry?.coordinates||[];
+            if(feature?.type==='Feature' && feature.geometry?.type==='Point' &&
+               typeof coords[0]==='number' && typeof coords[1]==='number'){
+              const [lon,lat]=coords;
+              const m=L.marker([lat,lon],{draggable:true}).addTo(map);
+              m.bindPopup('<div class="popup-body">Loading…</div>',{closeButton:true,closeOnClick:false,autoClose:false});
+              if(row_marker_id!=null){
+                fetch('marker_popup.sql?marker_id='+encodeURIComponent(row_marker_id))
+                  .then(r=>r.text()).then(html=>{const p=m.getPopup(); if(p) p.setContent(`${html}${coordsHTML(lat,lon)}`);})
+                  .catch(()=>{const p=m.getPopup(); if(p) p.setContent(`<strong>Marker</strong>${coordsHTML(lat,lon)}`);});
+                wire_delete_on_popup_x(m,row_marker_id); attachDragPersist(m,row_marker_id);
+              } else {
+                wire_delete_on_popup_x(m,null); const p=m.getPopup();
+                if(p) p.setContent(`<strong>Marker</strong>${coordsHTML(lat,lon)}`); attachDragPersist(m,null);
+              }
+            }
+          }catch(e){console.error('Bad GeoJSON row',e);}
         })();
       {{/if}}
     {{/each_row}}
-  } catch (e) { console.error('rendering existing markers failed', e); }
+  } catch(e){ console.error('rendering existing markers failed', e); }
 
-  // Map click: add draggable marker, show coords, save, then wire DB drag persist
-  map.on('click', (e) => {
-    const { lat, lng } = e.latlng;
-    const m = L.marker([lat, lng], { draggable: true }).addTo(map);
-
-    m.bindPopup(
-      `<div class="popup-body">Saving…</div>${coordsHTML(lat, lng)}`,
-      { closeButton: true, closeOnClick: false, autoClose: false }
-    ).openPopup();
-
-    wire_delete_on_popup_x(m, null);
-
-    // While id is unknown, keep popup coords in sync on drag
-    const preIdDrag = () => {
-      const { lat: nlat, lng: nlon } = m.getLatLng();
-      replaceOrAppendCoords(m.getPopup(), nlat, nlon);
-    };
-    m.on('dragend', preIdDrag);
-
-    // Save to DB and get the new id back
-    fetch('add_marker.sql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ latitude: lat, longitude: lng, title: '' }).toString()
-    })
-      .then(r => r.text())
-      .then(t => {
-        const match = t && t.match(/(\d+)/);
-        const new_id = match ? parseInt(match[1], 10) : null;
-
-        if (m._deleted) {
-          if (new_id != null) {
-            fetch('delete_marker.sql', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({ id: new_id }).toString()
-            });
-          }
-          return;
-        }
-
-        wire_delete_on_popup_x(m, new_id);
-
-        if (new_id != null) {
-          fetch('marker_popup.sql?marker_id=' + encodeURIComponent(new_id))
-            .then(r2 => r2.text())
-            .then(html => { const p = m.getPopup(); if (p) p.setContent(`${html}${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`); })
-            .catch(() => { const p = m.getPopup(); if (p) p.setContent(`<strong>Marker</strong>${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`); });
+  // Add new marker on click
+  map.on('click',(e)=>{
+    const {lat,lng}=e.latlng;
+    const m=L.marker([lat,lng],{draggable:true}).addTo(map);
+    m.bindPopup(`<div class="popup-body">Saving…</div>${coordsHTML(lat,lng)}`,{closeButton:true,closeOnClick:false,autoClose:false}).openPopup();
+    wire_delete_on_popup_x(m,null);
+    const preIdDrag=()=>{const {lat:nlat,lng:nlon}=m.getLatLng(); replaceOrAppendCoords(m.getPopup(),nlat,nlon);};
+    m.on('dragend',preIdDrag);
+    fetch('add_marker.sql',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({latitude:lat,longitude:lng,title:''}).toString()})
+      .then(r=>r.text()).then(t=>{
+        const match=t&&t.match(/(\d+)/); const new_id=match?parseInt(match[1],10):null;
+        if(m._deleted){ if(new_id!=null){ fetch('delete_marker.sql',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+          body:new URLSearchParams({id:new_id}).toString()}); } return; }
+        wire_delete_on_popup_x(m,new_id);
+        if(new_id!=null){
+          fetch('marker_popup.sql?marker_id='+encodeURIComponent(new_id))
+            .then(r2=>r2.text()).then(html=>{const p=m.getPopup(); if(p) p.setContent(`${html}${coordsHTML(m.getLatLng().lat,m.getLatLng().lng)}`);})
+            .catch(()=>{const p=m.getPopup(); if(p) p.setContent(`<strong>Marker</strong>${coordsHTML(m.getLatLng().lat,m.getLatLng().lng)}`);});
         } else {
-          const p = m.getPopup();
-          if (p) p.setContent(`<strong>Marker saved</strong>${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`);
+          const p=m.getPopup(); if(p) p.setContent(`<strong>Marker saved</strong>${coordsHTML(m.getLatLng().lat,m.getLatLng().lng)}`);
         }
-
-        // Switch from pre-id drag to persisted drag updates
-        m.off('dragend', preIdDrag);
-        attachDragPersist(m, new_id);
+        m.off('dragend',preIdDrag); attachDragPersist(m,new_id);
       })
-      .catch(() => {
-        const p = m.getPopup();
-        if (p) p.setContent(`<strong>Save failed</strong>${coordsHTML(m.getLatLng().lat, m.getLatLng().lng)}`);
-      });
+      .catch(()=>{const p=m.getPopup(); if(p) p.setContent(`<strong>Save failed</strong>${coordsHTML(m.getLatLng().lat,m.getLatLng().lng)}`);});
   });
 
-  // Reset all markers (DB) then refresh
-  document.getElementById('reset-map-btn')?.addEventListener('click', () => {
-    fetch('clear_markers.sql', { method: 'POST' })
-      .then(() => location.reload())
-      .catch(() => location.reload());
+  // Clear map
+  document.getElementById('reset-map-btn')?.addEventListener('click', ()=>{
+    fetch('clear_marker.sql',{method:'POST'}).then(()=>location.reload()).catch(()=>location.reload());
   });
 })();
 </script>
