@@ -4,6 +4,7 @@ body {
     overflow-x: none;
 }
 
+/*Style Content Background*/
 .content {
     width: 80%;
     background-color: #ffffff;
@@ -15,6 +16,7 @@ body {
     margin: 3% auto;
 }
 
+/*Style Text*/
 h1 {
     color: #3C2946;
     font-weight: 700;
@@ -29,6 +31,7 @@ p {
     font-weight: 500;
 }
 
+/*Style Iframe Embed*/
 iframe {
     border: none;
     border-radius: 10px;
@@ -38,6 +41,7 @@ iframe {
     text-align: center;
 }
 
+/*Style Logo*/
 .logo {
     width: 50%;
     height: auto;
@@ -47,12 +51,14 @@ iframe {
     text-align: center;
 }
 
+/*Style Image*/
 img {
     border-radius: 15px;
     user-select: none;
     
 }
 
+/*Style Info Cards*/
 .info-card-gallery {
     display: flex;
     justify-content: center;
@@ -92,6 +98,7 @@ img {
     text-align: center;
 }
 
+/*Style About Text*/
 .about-text {
     width: 70%;
     margin-right: auto;
@@ -100,6 +107,7 @@ img {
     font-weight: 600;
 }
 
+/*Style Instruction Section*/
 .instructions {
     background-color: #3C2946;
     padding: 10px 25px;
@@ -123,10 +131,12 @@ img {
     padding-left: 50px;
 }
 
+/*Style Submission Info Text*/
 .submission-text {
     text-align: center;
 }
 
+/*Style for Mobile*/
 @media screen and (max-width: 1000px) {
     .logo {
         width: 100%;
