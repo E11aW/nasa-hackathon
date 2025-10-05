@@ -3,11 +3,18 @@
 -- =========================
 
 -- === Leaflet shell (CSS/JS) ===
-SELECT
-  'shell' AS component,
-  '' AS title,
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
+ SELECT
+   'shell' AS component,
+   '' AS title,
+   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
+   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
+
+  -- 1) The ONLY shell, and the FIRST component-emitting SELECT
+-- SELECT
+  -- 'shell' AS component,
+  -- 'Clickable Map' AS title,
+  -- 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
+  -- 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
 -- === Markers table (GeoJSON Feature per row) ===
 CREATE TABLE IF NOT EXISTS markers (

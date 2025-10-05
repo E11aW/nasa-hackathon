@@ -1,5 +1,7 @@
 <link rel="stylesheet" href="/style.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
@@ -16,6 +18,22 @@
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 50);
 
+  /* === JS PATCH: give tiles a tiny overlap to hide hairline seams === */
+  (function patchLeafletTileOverlap() {
+    if (!L || !L.GridLayer) return;
+    const orig = L.GridLayer.prototype._initTile;
+    if (orig && !orig.__overlapPatched) {
+      L.GridLayer.prototype._initTile = function (tile) {
+        orig.call(this, tile);
+        const sz = this.getTileSize();
+        tile.style.width  = (sz.x + 0.0) + 'px';
+        tile.style.height = (sz.y + 0.0) + 'px';
+      };
+      L.GridLayer.prototype._initTile.__overlapPatched = true;
+    }
+  })();
+  /* === end patch === */
+
   // --- Map init ---
   const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
   const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
@@ -25,17 +43,27 @@
   const WORLD_BOUNDS = L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180));
 
   const map = L.map(el, {
-    minZoom: 2,                 // ⟵ how far you allow zooming out (tweak as you like)
-    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}, // keep your existing max if you want
-    maxBounds: WORLD_BOUNDS,    // ⟵ clamp panning to the real world
-    maxBoundsViscosity: 1.0,    // ⟵ “elastic” edge; 1.0 = hard clamp
-    worldCopyJump: false,       // ⟵ don’t jump to another copy
+    minZoom: 2,
+    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
+    maxBounds: WORLD_BOUNDS,
+    maxBoundsViscosity: 1.0,
+    worldCopyJump: false,
+
+    /* smoother zoom/pan */
+    zoomAnimation: true,
+    fadeAnimation: true,
+    zoomSnap: 0,                 // allow fractional zoom (smooth)
+    wheelDebounceTime: 20,       // more responsive wheel
+    wheelPxPerZoomLevel: 10,     // gentler step per wheel notch
   }).setView([init_lat, init_lon], init_zoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
-    noWrap: true,              // ⟵ do not wrap horizontally
-    bounds: WORLD_BOUNDS       // ⟵ extra hint to tile layer about valid area
+    tileSize: 256,          // OSM serves 256px tiles
+    detectRetina: true,     // OK with OSM; set false if you prefer no @2x
+    noWrap: true,           // single world – no horizontal repeat
+    bounds: WORLD_BOUNDS,   // hint valid area
+    keepBuffer: 3           // keep a few rings of tiles to avoid gaps while panning
   }).addTo(map);
 
   // --- Dataset selector (affects Baseline/Scenario values) ---
@@ -144,7 +172,7 @@
     });
   }
 
-  // --- Render existing saved pins (expects SELECT marker_id, geojson FROM markers;) ---
+  // --- Render existing saved pins ---
   function add_saved_marker_from_feature(f, row_marker_id) {
     if (!f || f.type !== 'Feature' || !f.geometry || f.geometry.type !== 'Point') return;
     const [lon, lat] = f.geometry.coordinates || [];
