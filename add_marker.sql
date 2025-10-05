@@ -16,17 +16,13 @@ SELECT
       'type','Point',
       'coordinates', json_array(lon, lat)
     ),
-    'properties', json_object(
-      'title', title
-    )
+    'properties', json_object('title', title)
   )
 FROM payload;
 
--- Immediately patch properties.id to the real row id we just created
 UPDATE markers
 SET geojson = json_set(geojson, '$.properties.id', id)
 WHERE rowid = last_insert_rowid();
 
--- Return a small JSON response (optional)
 SELECT 'json' AS component,
        json_object('ok', 1, 'marker_id', last_insert_rowid()) AS value;

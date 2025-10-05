@@ -1,13 +1,15 @@
+-- =========================
 -- file: index.sql
+-- =========================
 
--- Load Leaflet CSS/JS
+-- === Leaflet shell (CSS/JS) ===
 SELECT
   'shell' AS component,
-  'Clickable Map' AS title,
+  'Clickable Map + CAMS Popups' AS title,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
 
--- Create table (id, title, geojson) if missing
+-- === Markers table (GeoJSON Feature per row) ===
 CREATE TABLE IF NOT EXISTS markers (
   id      INTEGER PRIMARY KEY,
   title   TEXT NOT NULL,
@@ -18,14 +20,19 @@ CREATE TABLE IF NOT EXISTS markers (
   CHECK (json_extract(geojson, '$.geometry.coordinates[1]') BETWEEN  -90 AND  90)
 );
 
--- Example seed
-INSERT OR IGNORE INTO markers (id, title, geojson)
-SELECT 1, 'Mvezo, Birth Place of Nelson Mandela',
-'{"type":"Feature","properties":{"id":1,"title":"Mvezo, Birth Place of Nelson Mandela"},
+-- (Optional) Seed one marker if DB is empty
+INSERT INTO markers (title, geojson)
+SELECT 'Mvezo, Birth Place of Nelson Mandela',
+'{"type":"Feature","properties":{"title":"Mvezo, Birth Place of Nelson Mandela"},
   "geometry":{"type":"Point","coordinates":[28.49,-31.96]}}'
-WHERE NOT EXISTS (SELECT 1 FROM markers WHERE id = 1);
+WHERE NOT EXISTS (SELECT 1 FROM markers);
 
--- Dynamic initial center (fallback 40, -110)
+-- Ensure properties.id is set for all rows (old rows too)
+UPDATE markers
+SET geojson = json_set(geojson, '$.properties.id', id)
+WHERE json_extract(geojson,'$.properties.id') IS NULL;
+
+-- === Initial map center (avg of all markers; fallback 40/-110) ===
 WITH pts AS (
   SELECT
     CAST(json_extract(geojson, '$.geometry.coordinates[0]') AS REAL) AS lon,
@@ -34,15 +41,17 @@ WITH pts AS (
 ),
 stats AS (SELECT COUNT(*) AS n, AVG(lat) AS lat, AVG(lon) AS lon FROM pts)
 SELECT
-  'map-clickable' AS component,     -- uses templates/map-clickable.handlebars
+  'map-clickable' AS component,          -- uses templates/map-clickable.handlebars
   600              AS height,
   COALESCE((SELECT lat FROM stats), 40)    AS latitude,
   COALESCE((SELECT lon FROM stats), -110)  AS longitude,
   5                AS zoom,
   'main-map'       AS id;
 
--- One row per marker consumed by the template. IMPORTANT: include properties.id
+-- === Stream markers to the template (one row per Feature) ===
+-- IMPORTANT: expose BOTH id and geojson
 SELECT
+  id,
   json_object(
     'type','Feature',
     'geometry', json_object(
@@ -53,20 +62,20 @@ SELECT
       )
     ),
     'properties', json_object(
-      'id', id,
+      'id',    id,       -- keep an explicit id in properties
       'title', title
     )
   ) AS geojson
 FROM markers
 ORDER BY id DESC;
 
--- A little caption
+-- === Small caption ===
 SELECT
   'html' AS component,
   '<style>
      body { font-family: Inter, system-ui, sans-serif; margin: 0; padding: 1rem; }
-     h1 { margin: .5rem 0 0; font-weight: 800; }
+     h1 { margin:.5rem 0 0; font-weight: 800; }
      .hint { color:#666; font-size:.95rem }
    </style>
    <h1>Click the map to add a marker</h1>
-   <p class="hint">Values fetched from CAMS will appear in the marker popup.</p>' AS html;
+   <p class="hint">CAMS values will appear in the marker popup when the worker ingests data.</p>' AS html;

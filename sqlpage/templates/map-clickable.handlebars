@@ -1,112 +1,165 @@
+<div style="margin:.5rem 0;">
+  <button id="reset-map-btn" type="button">Reset Map</button>
+</div>
+
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
      style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
 
 <script nonce="{{@csp_nonce}}">
 (function boot() {
-  const elId = "{{#if id}}{{id}}{{else}}map{{/if}}";
-  const el = document.getElementById(elId);
+  const el_id = "{{#if id}}{{id}}{{else}}map{{/if}}";
+  const el = document.getElementById(el_id);
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 30);
 
-  const lat  = {{#if latitude}}{{latitude}}{{else}}0.0522{{/if}};
-  const lon  = {{#if longitude}}{{longitude}}{{else}}-20.2437{{/if}};
-  const zoom = {{#if zoom}}{{zoom}}{{else}}5{{/if}};
-  const map  = L.map(el).setView([lat, lon], zoom);
+  // initial view (override via index.sql)
+  const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
+  const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
+  const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
+  const map = L.map(el).setView([init_lat, init_lon], init_zoom);
 
-  // ---- Base layer ----
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
+    maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
   }).addTo(map);
 
-  // Utility: build a nice popup from CAMS json payload
-  function buildCamsHTML(title, camsArray) {
-    let html = `<strong>${title || "Marker"}</strong><br/>`;
-    if (Array.isArray(camsArray) && camsArray.length) {
-      // Our marker_popup.sql returns [{"value":[{variable,value,unit,obs_time}, ...]}]
-      const rows = camsArray[0]?.value || [];
-      if (rows.length) {
-        html += `<div style="font:12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif">`;
-        html += `Latest CAMS values:<br/>`;
-        for (const r of rows) {
-          html += `${r.variable}: ${r.value} ${r.unit || ""}<br/>`;
+  // ----- helpers -----
+  function set_popup_html(marker_obj, html) {
+    const p = marker_obj.getPopup && marker_obj.getPopup();
+    if (p) p.setContent(html);
+  }
+
+  function safe_get_marker_id(feature_obj, row_id) {
+    if (row_id != null) return row_id;
+    if (feature_obj && feature_obj.properties && typeof feature_obj.properties.id !== 'undefined') {
+      return feature_obj.properties.id;
+    }
+    return null;
+  }
+
+  function fetch_popup_and_set(marker_obj, marker_id) {
+    fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
+      .then(function (r) { return r.text(); })
+      .then(function (txt) {
+        // Try JSON first; else HTML
+        let json = null;
+        try { json = JSON.parse(txt); } catch (_) {}
+        if (json && Array.isArray(json) && json.length) {
+          // JSON component from SQLPage: take array[0].value (array of rows)
+          const rows = json[0].value || [];
+          let html = '<strong>Marker</strong><br/>';
+          if (rows.length) {
+            html += '<div style="font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif">Latest CAMS values:<br/>';
+            rows.forEach(function(r){
+              html += (r.variable + ': ' + r.value + ' ' + (r.unit || '') + '<br/>');
+            });
+            html += '</div>';
+          } else {
+            html += '<em>No CAMS data yet.</em>';
+          }
+          set_popup_html(marker_obj, html);
+        } else {
+          // Treat as HTML fragment (our diagnostic SQL returns HTML)
+          set_popup_html(marker_obj, txt || '<strong>Marker</strong>');
         }
-        html += `</div>`;
-      } else {
-        html += `<em>No CAMS data yet.</em>`;
-      }
-    } else {
-      html += `<em>No CAMS data yet.</em>`;
-    }
-    return html;
+      })
+      .catch(function () { /* keep existing popup text */ });
   }
 
-  // Add a marker from a GeoJSON Feature
-  function addMarkerFromFeature(f) {
-    if (!f || f.type !== "Feature" || !f.geometry || f.geometry.type !== "Point") return;
-    const c = f.geometry.coordinates; // [lon, lat]
-    if (!Array.isArray(c) || c.length < 2) return;
+  function add_saved_marker_from_feature(feature_obj, row_id) {
+    if (!feature_obj || feature_obj.type !== "Feature" || !feature_obj.geometry || feature_obj.geometry.type !== "Point") return;
 
-    const title = (f.properties && (f.properties.title || f.properties.name)) || "Marker";
-    const mk = L.marker([c[1], c[0]]).addTo(map);
+    const coords = feature_obj.geometry.coordinates; // [lon, lat]
+    if (!Array.isArray(coords) || coords.length < 2) return;
 
-    // If we have a marker id, fetch popup details (CAMS); else show a simple popup
-    const markerId = f.properties && f.properties.id;
-    if (markerId != null) {
-      mk.bindPopup(`<em>Loading data…</em>`);
-      fetch('marker_popup.sql?marker_id=' + encodeURIComponent(markerId))
-        .then(r => r.json())
-        .then(json => mk.setPopupContent(buildCamsHTML(title, json)))
-        .catch(() => mk.setPopupContent(`<strong>${title}</strong><br/><em>No CAMS data yet.</em>`));
-    } else {
-      mk.bindPopup(`<strong>${title}</strong>`);
+    const marker_obj = L.marker([coords[1], coords[0]]).addTo(map);
+    marker_obj.bindPopup('<em>Loading…</em>');
+
+    const marker_id = safe_get_marker_id(feature_obj, row_id);
+    if (marker_id != null) {
+      fetch_popup_and_set(marker_obj, marker_id);
     }
-    return mk;
+    return marker_obj;
   }
 
-  // ---- Existing pins from the SQL query ----
+  // render existing rows (index.sql MUST stream id and geojson; see snippet below)
   try {
     {{#each_row}}
       {{#if geojson}}
-        (function(){
+        (function () {
           try {
-            // Expecting 'geojson' to be a full GeoJSON Feature (with properties.id if possible)
-            const f = {{{geojson}}};
-            addMarkerFromFeature(f);
-          } catch (e) { console.error('Bad GeoJSON in row', e); }
+            const feature_obj = {{{geojson}}};
+            const row_id = {{#if id}}{{id}}{{else}}null{{/if}};
+            add_saved_marker_from_feature(feature_obj, row_id);
+          } catch (e) { console.error('bad geojson row', e); }
         })();
       {{/if}}
     {{/each_row}}
-  } catch (e) {
-    console.error('Rendering existing markers failed', e);
-  }
+  } catch (e) { console.error('rendering existing markers failed', e); }
 
-  // ---- Click to drop a pin and save it ----
-  map.on('click', (e) => {
-    const { lat, lng } = e.latlng;
+  // click: drop, save, poll for CAMS
+  map.on('click', function (ev) {
+    const lat = ev.latlng.lat, lon = ev.latlng.lng;
+    const marker_obj = L.marker([lat, lon]).addTo(map);
+    marker_obj.bindPopup('<strong>Marker saved.</strong><br/><em>Fetching CAMS…</em>').openPopup();
 
-    // Show a pin immediately with a "saving" popup
-    const mk = L.marker([lat, lng]).addTo(map).bindPopup('<em>Saving…</em>').openPopup();
-
-    // Save to DB through SQLPage action
     const body = new URLSearchParams();
     body.set('latitude',  lat);
-    body.set('longitude', lng);
-    body.set('title', ''); // optional; adjust if your add_marker.sql expects a title
+    body.set('longitude', lon);
+    body.set('title', '');
 
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString()
     })
-    .then(() => {
-      // If your DB trigger enqueues a CAMS fetch, we can update the popup text now.
-      mk.setPopupContent('<strong>Marker saved.</strong><br/><em>CAMS data will appear soon.</em>');
-      // Optional: you could re-load the page or poll for popup data if you return the new marker id.
+    .then(async function (resp) {
+      if (!resp.ok) {
+        const txt = await resp.text().catch(()=> '');
+        throw new Error('http ' + resp.status + ': ' + txt);
+      }
+      let json = null; let txt = '';
+      try { json = await resp.json(); } catch (_) { try { txt = await resp.text(); } catch(e){} }
+      let new_id = (json && json.value && json.value.marker_id) ? json.value.marker_id
+                : (json && json.marker_id ? json.marker_id : null);
+      if (!new_id) {
+        const last = await fetch('marker_last.sql').then(r => r.json()).catch(()=>null);
+        new_id = last && last.value && last.value.marker_id ? last.value.marker_id : null;
+      }
+      return new_id;
     })
-    .catch(() => {
-      mk.setPopupContent('<strong>Save failed.</strong>');
+    .then(function (marker_id) {
+      if (!marker_id) return;
+      const start_ms = Date.now();
+      (function poll() {
+        fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
+          .then(function (r) { return r.text(); })
+          .then(function (txt) {
+            let json = null;
+            try { json = JSON.parse(txt); } catch (_) {}
+            if (json && Array.isArray(json) && json.length && Array.isArray(json[0].value) && json[0].value.length) {
+              set_popup_html(marker_obj, (function(){
+                return (function(rows){
+                  let h = '<strong>Marker</strong><br/><div style="font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif">Latest CAMS values:<br/>';
+                  rows.forEach(function(r){ h += (r.variable + ': ' + r.value + ' ' + (r.unit || '') + '<br/>'); });
+                  return h + '</div>';
+                })(json[0].value);
+              })());
+            } else if (txt && txt.trim().length && txt.trim() !== '[]') {
+              set_popup_html(marker_obj, txt);
+            } else if (Date.now() - start_ms < 20000) {
+              setTimeout(poll, 1500);
+            }
+          })
+          .catch(function(){ if (Date.now() - start_ms < 20000) setTimeout(poll, 1500); });
+      })();
+    })
+    .catch(function (err) {
+      console.error('add_marker.sql failed:', err);
+      set_popup_html(marker_obj, '<strong>Save failed.</strong>');
     });
   });
+
+  var reset_btn = document.getElementById('reset-map-btn');
+  if (reset_btn) reset_btn.addEventListener('click', function () { location.reload(); });
 })();
 </script>
