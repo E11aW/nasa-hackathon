@@ -15,13 +15,6 @@ CREATE TABLE IF NOT EXISTS markers (
   CHECK (json_extract(geojson, '$.geometry.coordinates[1]') BETWEEN  -90 AND  90)
 );
 
--- 1) The ONLY shell, and the FIRST component-emitting SELECT
-SELECT
-  'shell' AS component,
-  'Clickable Map' AS title,
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
-
 -- 2) Your custom map component (blank start over the U.S.)
 SELECT
   'map-clickable' AS component,
