@@ -1,16 +1,18 @@
 body {
-    background-color: #BBD196;
+    background-color: #56556e;
     font-family: 'Inter', sans-serif;
     overflow-x: none;
 }
 
 .content {
     width: 80%;
+    background-color: #ffffff;
     margin-right: auto;
     margin-left: auto;
     display: block;
-    padding-top: 10px;
-    padding-bottom: 15px;
+    padding: 3%;
+    border-radius: 10px;
+    margin: 3% auto;
 }
 
 h1 {
@@ -65,6 +67,8 @@ img {
     border-radius: 10px;
     width: 25%;
     height: auto;
+    /*box-shadow: 8px 8px #56556e;*/
+    border: 4px solid #56556e;
 }
 
 .info-card img {
@@ -73,6 +77,7 @@ img {
     margin-left: auto;
     display: block;
     padding: 20px;
+    -webkit-user-drag: none;
 }
 
 .info-card p {
@@ -93,6 +98,33 @@ img {
     margin-left: auto;
     text-align: center;
     font-weight: 600;
+}
+
+.instructions {
+    background-color: #3C2946;
+    padding: 10px 25px;
+    margin: 20px;
+    border-radius: 10px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin-right: auto;
+    margin-left: auto;
+    border: 4px solid #56556e;
+}
+
+.instructions img {
+    height: 50px;
+}
+
+.instructions p {
+    width: 90%;
+    color: #ffffff;
+    padding-left: 50px;
+}
+
+.submission-text {
+    text-align: center;
 }
 
 @media screen and (max-width: 1000px) {
