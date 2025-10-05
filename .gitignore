@@ -1,1 +1,25 @@
 *.exe
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# CAMS data
+data/
+*.nc
+*.grib
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Node (since you have package-lock.json)
+node_modules/
+
+# SQLite journals/backups
+sqlpage/*.db-*
+sqlpage/*.db-shm
+sqlpage/*.db-wal
+sqlpage/*.db
+sqlpage/*.db-wal
+sqlpage/*.db-shm
