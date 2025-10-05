@@ -22,12 +22,12 @@
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}}
   }).addTo(map);
 
-  // Attach delete-on-X
+  // Delete ONLY when the popup's × is clicked.
+  // If marker_id is null, we remove the marker visually and flag it as deleted;
+  // when the DB id comes back later, we will sync-delete it from the DB.
   function wire_delete_on_popup_x(marker, marker_id) {
-    if (marker_id == null) return; // only for saved markers
     marker.on('popupopen', (e) => {
       const popup_el = (e.popup.getElement && e.popup.getElement()) || e.popup._container;
-      console.log('test');
       const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
       if (!close_button) return;
 
@@ -36,16 +36,20 @@
         ev.stopPropagation();
         if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
 
-        marker.remove();
-        console.log('Marker deleted: ' + marker_id);
+        marker.remove();                 // remove from map immediately
+        marker._deleted = true;          // mark as removed (used for pre-save deletes)
 
-        fetch('delete_marker.sql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ id: marker_id }).toString()
-        });
+        if (marker_id != null) {
+          // We know the DB row: delete it now.
+          fetch('delete_marker.sql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ id: marker_id }).toString()
+          });
+        }
       };
 
+      // capture:true so we intercept before Leaflet's own handler
       close_button.addEventListener('click', on_close_click, { once: true, capture: true });
     });
   }
@@ -58,28 +62,35 @@
 
     const m = L.marker([coords[1], coords[0]]).addTo(map);
 
+    // Show your imported popup HTML (loaded below), with the default × button
     m.bindPopup('<div class="popup-body">Loading…</div>', {
       closeButton: true,
       closeOnClick: false,
       autoClose: false
     });
 
-    const marker_id = (row_id != null) ? row_id
-                   : (f.properties && typeof f.properties.id !== 'undefined' ? f.properties.id : null);
+    const marker_id = (row_id != null)
+      ? row_id
+      : (f.properties && typeof f.properties.id !== 'undefined' ? f.properties.id : null);
 
     if (marker_id != null) {
+      // Load your popup HTML exactly as returned by marker_popup.sql
       fetch('marker_popup.sql?marker_id=' + encodeURIComponent(marker_id))
         .then(r => r.text())
         .then(html => { const p = m.getPopup(); if (p) p.setContent(html); })
         .catch(() => { const p = m.getPopup(); if (p) p.setContent('<strong>Marker</strong>'); });
 
+      // Enable delete via the popup × (will also delete from DB)
       wire_delete_on_popup_x(m, marker_id);
+    } else {
+      // No id: still allow visual delete via × (DB sync handled when id is known)
+      wire_delete_on_popup_x(m, null);
     }
 
     return m;
   }
 
-  // Render existing saved pins (index.sql: SELECT id, geojson FROM markers;)
+  // Render existing saved pins (index.sql should SELECT id, geojson FROM markers;)
   try {
     {{#each_row}}
       {{#if geojson}}
@@ -96,16 +107,19 @@
     console.error('Rendering existing markers failed', e);
   }
 
-  // Map click: drop a pin, open its popup immediately, and save (NO page reload)
+  // Map click: drop a pin, open popup immediately, save, then wire delete & load popup HTML
   map.on('click', (e) => {
     const m = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
 
-    m.bindPopup('<strong>Saved pin</strong>', {
-      closeButton: true,
-      closeOnClick: false,
-      autoClose: false
+    // Open a popup right away
+    m.bindPopup('<div class="popup-body">Saving…</div>', {
+      closeButton: true, closeOnClick: false, autoClose: false
     }).openPopup();
 
+    // Allow delete immediately even before DB id is known
+    wire_delete_on_popup_x(m, null);
+
+    // Save to DB and get the NEW id back
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -114,12 +128,49 @@
         longitude: e.latlng.lng,
         title: ''
       }).toString()
+    })
+    .then(r => r.text())
+    .then(t => {
+      const match = t && t.match(/(\d+)/);
+      const new_id = match ? parseInt(match[1], 10) : null;
+
+      if (m._deleted) {
+        // User already clicked × before the insert returned → sync delete the DB row
+        if (new_id != null) {
+          fetch('delete_marker.sql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ id: new_id }).toString()
+          });
+        }
+        return; // marker already gone from UI
+      }
+
+      // Now we know the id: re-wire delete to also remove from DB
+      wire_delete_on_popup_x(m, new_id);
+
+      // Load your popup HTML
+      if (new_id != null) {
+        return fetch('marker_popup.sql?marker_id=' + encodeURIComponent(new_id))
+          .then(r2 => r2.text())
+          .then(html => { const p = m.getPopup(); if (p) p.setContent(html); })
+          .catch(() => { const p = m.getPopup(); if (p) p.setContent('<strong>Marker</strong>'); });
+      } else {
+        const p = m.getPopup();
+        if (p) p.setContent('<strong>Marker saved</strong>');
+      }
+    })
+    .catch(() => {
+      const p = m.getPopup();
+      if (p) p.setContent('<strong>Save failed</strong>');
     });
   });
 
-  // Reset button: the ONLY place we refresh the page
+  // Reset Map button: delete ALL markers, then refresh
   document.getElementById('reset-map-btn')?.addEventListener('click', () => {
-    location.reload();
+    fetch('clear_markers.sql', { method: 'POST' })
+      .then(() => location.reload())
+      .catch(() => location.reload()); // still refresh UI even if delete fails
   });
 })();
 </script>
