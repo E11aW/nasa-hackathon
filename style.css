@@ -50,6 +50,7 @@ iframe {
 img {
     border-radius: 15px;
     user-select: none;
+    
 }
 
 .info-card-gallery {
@@ -163,3 +164,8 @@ img {
         width: 100%;
     }
 }
+
+/* Leaflet: sharp tile corners, ignore global img rules */
+.leaflet-container img.leaflet-tile,
+.leaflet-tile { border-radius: 0 !important; }
+.leaflet-container img.leaflet-tile { max-width: none !important; }
