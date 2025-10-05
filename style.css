@@ -1,16 +1,18 @@
 body {
-    background-color: #BBD196;
+    background-color: #56556e;
     font-family: 'Inter', sans-serif;
     overflow-x: none;
 }
 
 .content {
     width: 80%;
+    background-color: #ffffff;
     margin-right: auto;
     margin-left: auto;
     display: block;
-    padding-top: 10px;
-    padding-bottom: 15px;
+    padding: 3%;
+    border-radius: 10px;
+    margin: 3% auto;
 }
 
 h1 {
@@ -113,7 +115,7 @@ img {
 }
 
 .instructions p {
-    width: 100%;
+    width: 90%;
     color: #ffffff;
     padding-left: 50px;
 }
