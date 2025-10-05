@@ -117,6 +117,10 @@ img {
         width: 75%;
     }
 
+    .info-card-text p, .info-card-text h1 {
+        text-align: left;
+    }
+
     .info-card img {
         width: 20%;
         margin: 10px;
