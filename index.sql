@@ -36,7 +36,8 @@ SELECT
   39.8283   AS latitude,
   -98.5795  AS longitude,
   3         AS zoom,     -- wider view to include AK/HI
-  'main-map' AS id;
+  'main-map' AS id
+  'remove-background' AS class;
 
 SELECT geojson FROM markers;
 

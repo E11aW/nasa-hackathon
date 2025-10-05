@@ -47,6 +47,7 @@ iframe {
 
 img {
     border-radius: 15px;
+    user-select: none;
 }
 
 .info-card-gallery {
@@ -86,7 +87,7 @@ img {
     text-align: center;
 }
 
-.aboutText {
+.about-text {
     width: 70%;
     margin-right: auto;
     margin-left: auto;
@@ -119,5 +120,9 @@ img {
     .info-card img {
         width: 20%;
         margin: 10px;
+    }
+
+    .about-text {
+        width: 100%;
     }
 }
