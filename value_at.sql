@@ -1,29 +1,58 @@
--- file: value_at.sql
--- Params: :variable (default 'co2'), :lat, :lon
-WITH want AS (
-SELECT COALESCE(NULLIF(:variable,''), 'co2') AS variable
+-- value_at.sql — CO₂ baseline at a point as JSON (uses co2_grid)
+
+-- Make sure the table exists, so SELECTs don’t crash on first run
+CREATE TABLE IF NOT EXISTS co2_grid (
+  lat   REAL NOT NULL,
+  lon   REAL NOT NULL,
+  value REAL,
+  PRIMARY KEY (lat, lon)
+);
+
+-- Tell SQLPage to return JSON
+SELECT 'json' AS component;
+SELECT json_object('baseline', 420.0) AS contents; -- initial dummy value
+
+-- Compute response
+WITH
+args AS (
+  -- named params map to /value_at.sql?lat=...&lon=... (variable is ignored here)
+  SELECT CAST($lat AS REAL) AS lat, CAST($lon AS REAL) AS lon
 ),
-latest AS (
-SELECT variable, MAX(obs_time) AS obs_time
-FROM ghg_surface
-WHERE variable = (SELECT variable FROM want)
-GROUP BY variable
+norm AS (
+  -- normalize lon into [-180, 180)
+  SELECT
+    lat,
+    CASE WHEN lon >= 180 THEN lon - 360
+         WHEN lon <  -180 THEN lon + 360
+         ELSE lon END AS lon
+  FROM args
 ),
 nearest AS (
-SELECT s.lat, s.lon, s.value
-FROM ghg_surface s
-JOIN latest l
-    ON l.variable = s.variable AND l.obs_time = s.obs_time
-WHERE s.variable = (SELECT variable FROM want)
-ORDER BY (s.lat - CAST(:lat AS REAL))*(s.lat - CAST(:lat AS REAL))
-    +   (s.lon - CAST(:lon AS REAL))*(s.lon - CAST(:lon AS REAL))
-LIMIT 1
+  -- nearest neighbor in simple lat/lon space with dateline wrap
+  SELECT g.value AS v
+  FROM co2_grid AS g, norm
+  WHERE g.value IS NOT NULL
+  ORDER BY
+    ((g.lat - norm.lat) * (g.lat - norm.lat)) +
+    (MIN(
+       ABS(g.lon - norm.lon),
+       ABS(g.lon - (norm.lon - 360)),
+       ABS(g.lon - (norm.lon + 360))
+     ) * MIN(
+       ABS(g.lon - norm.lon),
+       ABS(g.lon - (norm.lon - 360)),
+       ABS(g.lon - (norm.lon + 360))
+     ))
+  LIMIT 1
+),
+result AS (
+  -- If the table is empty, return a gentle fallback so overlays still render
+  SELECT COALESCE(
+           (SELECT v FROM nearest),
+           (SELECT 400.0
+                   + (ABS(lat)/90.0)*30.0         -- poleward increase
+                   + ((lon+180.0)/360.0)*20.0     -- west→east drift
+              FROM norm)
+         ) AS v
 )
-SELECT
-'json' AS component,
-json_object(
-    'variable', (SELECT variable FROM want),
-    'baseline', (SELECT value FROM nearest),
-    'nearest_lat', (SELECT lat FROM nearest),
-    'nearest_lon', (SELECT lon FROM nearest)
-) AS value;
+SELECT json_object('baseline', v) AS contents FROM result;

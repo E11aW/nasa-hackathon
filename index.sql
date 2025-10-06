@@ -2,22 +2,14 @@
 -- file: index.sql
 -- =========================
 
--- === Leaflet shell (CSS/JS) ===
- SELECT
-   'shell' AS component,
-   '' AS title,
-   ' ' AS footer,
-   'fluid' AS layout,
-   /* 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css, */
-   'style.css' as css,
-   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
-
-  -- 1) The ONLY shell, and the FIRST component-emitting SELECT
--- SELECT
-  -- 'shell' AS component,
-  -- 'Clickable Map' AS title,
-  -- 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' AS css,
-  -- 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'  AS javascript;
+-- === Page shell: load BOTH your CSS and Leaflet ===
+SELECT
+  'shell'   AS component,
+  ''        AS title,
+  ' '       AS footer,
+  'fluid'   AS layout,
+  json('["/style.css","https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"]') AS css,
+  json('["https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"]')               AS javascript;
 
 -- === Markers table (GeoJSON Feature per row) ===
 CREATE TABLE IF NOT EXISTS markers (
@@ -30,7 +22,7 @@ CREATE TABLE IF NOT EXISTS markers (
   CHECK (json_extract(geojson, '$.geometry.coordinates[1]') BETWEEN  -90 AND  90)
 );
 
--- 2) The custom map component
+-- === Your custom map component ===
 SELECT
   'map-clickable' AS component,
   700       AS height,
@@ -39,8 +31,7 @@ SELECT
   4         AS zoom,
   'main-map' AS id;
 
--- 3) Row data for that component
--- CLEAN START (no markers on initial load). To show saved markers, remove WHERE 1=0.
+-- === Rows for the component (start empty; remove WHERE to show saved) ===
 SELECT id AS marker_id, geojson
 FROM markers
 WHERE 1 = 0;
