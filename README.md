@@ -7,6 +7,9 @@ Team Members: Ella Williams, Destiny Rebman, Clayton McArthur, Abby Hoyt, and Ch
 ## Project Summary
 Sustainable City Planning helps urban planners make data-driven decisions in the face of climate change. Users can place markers representing developments to gain insight into local and global climate impacts. This tool promotes urban expansion, sustainability, and responsible decision making. 
 
+## Project Demo
+Check our our project demo video [here](https://www.youtube.com/watch?v=YTQ6vhXiM6s)!
+
 ## Tools Used
 - GitHub
 - Visual Studio Code
