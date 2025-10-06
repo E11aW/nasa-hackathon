@@ -1,4 +1,3 @@
--- 0005_sst.sql
 -- Sea Surface Temperature (SST) storage for 1° global grids (180x360)
 -- r: 0..179 (0 = 90N), c: 0..359 (0 = 180W)
 -- kind: 'clim' (monthly climatology), period: 'MM' ('01','04','07','10')
