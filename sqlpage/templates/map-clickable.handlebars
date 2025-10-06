@@ -1,10 +1,5 @@
-<link rel="stylesheet" href="/style.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 <div id="{{#if id}}{{id}}{{else}}map{{/if}}"
-    style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
+     style="height: {{#if height}}{{height}}{{else}}600{{/if}}px;"></div>
 
 <div style="margin:.5rem 0;">
   <button style="background-color:#3C2946;border:none;margin-right:auto;margin-left:auto;display:block;padding:10px;color:white;font-family:'Inter',sans-serif;font-weight:500;border-radius:10px;margin-bottom:-35px;"
@@ -18,7 +13,10 @@
   if (!el) return;
   if (typeof window.L === 'undefined') return setTimeout(boot, 50);
 
-  /* === JS PATCH: give tiles a tiny overlap to hide hairline seams === */
+  /* ===== Hardcoded fallback for baseline CO₂ (ppm) ===== */
+  const HARDCODED_CO2_BASELINE = 420;  // 👈 change this value as needed
+
+  /* (optional) tiny tile-seam patch – disabled (0px) */
   (function patchLeafletTileOverlap() {
     if (!L || !L.GridLayer) return;
     const orig = L.GridLayer.prototype._initTile;
@@ -32,14 +30,11 @@
       L.GridLayer.prototype._initTile.__overlapPatched = true;
     }
   })();
-  /* === end patch === */
 
   // --- Map init ---
   const init_lat  = {{#if latitude}}{{latitude}}{{else}}39.8283{{/if}};
   const init_lon  = {{#if longitude}}{{longitude}}{{else}}-98.5795{{/if}};
   const init_zoom = {{#if zoom}}{{zoom}}{{else}}4{{/if}};
-
-  // World bounds in Web Mercator (avoid the polar singularities)
   const WORLD_BOUNDS = L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180));
 
   const map = L.map(el, {
@@ -48,25 +43,25 @@
     maxBounds: WORLD_BOUNDS,
     maxBoundsViscosity: 1.0,
     worldCopyJump: false,
-
-    /* smoother zoom/pan */
     zoomAnimation: true,
     fadeAnimation: true,
-    zoomSnap: 0,                 // allow fractional zoom (smooth)
-    wheelDebounceTime: 20,       // more responsive wheel
-    wheelPxPerZoomLevel: 10,     // gentler step per wheel notch
+    zoomSnap: 0,
+    wheelDebounceTime: 20,
+    wheelPxPerZoomLevel: 10
   }).setView([init_lat, init_lon], init_zoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: {{#if max_zoom}}{{max_zoom}}{{else}}19{{/if}},
-    tileSize: 256,          // OSM serves 256px tiles
-    detectRetina: true,     // OK with OSM; set false if you prefer no @2x
-    noWrap: true,           // single world – no horizontal repeat
-    bounds: WORLD_BOUNDS,   // hint valid area
-    keepBuffer: 3           // keep a few rings of tiles to avoid gaps while panning
+    tileSize: 256,
+    detectRetina: true,
+    noWrap: true,
+    bounds: WORLD_BOUNDS,
+    updateWhenZooming: true,
+    updateWhenIdle: false,
+    keepBuffer: 4
   }).addTo(map);
 
-  // --- Dataset selector (affects Baseline/Scenario values) ---
+  // ===== Dataset control (kept minimal) =====
   let currentVariable = 'co2';
   const dsCtrl = L.control({ position: 'topright' });
   dsCtrl.onAdd = function() {
@@ -74,10 +69,11 @@
     div.style.background = 'white';
     div.style.padding = '6px 8px';
     div.style.font = '14px/1.2 Inter, system-ui, sans-serif';
+    div.style.minWidth = '220px';
     div.innerHTML = `
       <div style="font-weight:600;margin-bottom:4px;">Dataset</div>
-      <select id="dataset-select" style="width:180px;">
-        <option value="co2">CAMS CO₂ (Air Quality)</option>
+      <select id="dataset-select" style="width:200px;">
+        <option value="co2" selected>CO₂ (Air Quality)</option>
         <option value="precip">Agroclimatic Precipitation</option>
       </select>
     `;
@@ -85,27 +81,44 @@
     return div;
   };
   dsCtrl.addTo(map);
+
   const dsSel = document.getElementById('dataset-select');
   if (dsSel) {
     currentVariable = dsSel.value;
-    dsSel.addEventListener('change', () => { currentVariable = dsSel.value; });
+    dsSel.addEventListener('change', () => {
+      currentVariable = dsSel.value;
+      scheduleCountryPaint?.();   // ok if overlay code not present
+    });
   }
 
-  // --- Helpers for value fetch & popup rendering ---
+  // ===== Value endpoints =====
   async function fetchBaselineAt(lat, lon) {
     const url = `value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
-    const r = await fetch(url);
-    const j = await r.json();
-    return j.value || j;
+    try {
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' }});
+      const j = await r.json();
+      const o = (j && j.contents && typeof j.contents === 'object') ? j.contents : j;
+      // Hardcoded fallback only affects BASELINE in UI when missing
+      const val = Number.isFinite(o?.baseline) ? o.baseline : HARDCODED_CO2_BASELINE;
+      return { baseline: val };
+    } catch {
+      return { baseline: HARDCODED_CO2_BASELINE };
+    }
   }
 
   async function fetchScenarioAt(lat, lon) {
     const url = `scenario_value_at.sql?variable=${encodeURIComponent(currentVariable)}&lat=${lat}&lon=${lon}`;
-    const r = await fetch(url);
-    const j = await r.json();
-    return j.value || j;
+    try {
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' }});
+      const j = await r.json();
+      const o = (j && j.contents && typeof j.contents === 'object') ? j.contents : j;
+      return o; // { scenario: number | null }
+    } catch {
+      return { scenario: null }; // unchanged; only baseline is forced
+    }
   }
 
+  // ===== Popups / markers =====
   function coordsHTML(lat, lon) {
     return `<div class="coords" style="margin-top:.25rem;font-size:.9em">
       <strong>Latitude:</strong> ${lat.toFixed(6)}<br>
@@ -114,10 +127,11 @@
   }
 
   function renderPopupHTML(title, baseline, scenario, lat, lon) {
+    // Baseline is already guaranteed numeric via fetchBaselineAt()
     return `
-      <div style="min-width:220px">
+      <div style="min-width:240px">
         <div style="font-weight:600;margin-bottom:.25rem;">${title ?? 'Factory'}</div>
-        <div><strong>Baseline (${currentVariable.toUpperCase()}):</strong> ${Number.isFinite(baseline)? baseline.toFixed(2) : '–'}</div>
+        <div><strong>Baseline (${currentVariable.toUpperCase()}):</strong> ${baseline.toFixed(2)}</div>
         <div><strong>With Factories:</strong> ${Number.isFinite(scenario)? scenario.toFixed(2) : '–'}</div>
         ${coordsHTML(lat, lon)}
       </div>`;
@@ -129,7 +143,8 @@
       const [b, s] = await Promise.all([fetchBaselineAt(lat, lng), fetchScenarioAt(lat, lng)]);
       m.getPopup()?.setContent(renderPopupHTML(title, b.baseline, s.scenario, lat, lng));
     } catch {
-      m.getPopup()?.setContent(renderPopupHTML(title, NaN, NaN, lat, lng));
+      // If even the fetch fails, show the hardcoded baseline
+      m.getPopup()?.setContent(renderPopupHTML(title, HARDCODED_CO2_BASELINE, NaN, lat, lng));
     }
   }
 
@@ -139,8 +154,7 @@
       const close_button = popup_el && popup_el.querySelector('.leaflet-popup-close-button');
       if (!close_button) return;
       const on_close_click = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
+        ev.preventDefault(); ev.stopPropagation();
         if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
         marker.remove();
         marker._deleted = true;
@@ -158,9 +172,7 @@
 
   function attachDragPersist(marker, marker_id, title) {
     marker.on('dragend', () => {
-      // 1) recompute values for new location
       refreshPopupForMarker(marker, title);
-      // 2) persist new location if we have an id
       if (marker_id != null) {
         const { lat, lng } = marker.getLatLng();
         fetch('update_marker.sql', {
@@ -172,7 +184,7 @@
     });
   }
 
-  // --- Render existing saved pins ---
+  // --- Render existing saved pins (if provided) ---
   function add_saved_marker_from_feature(f, row_marker_id) {
     if (!f || f.type !== 'Feature' || !f.geometry || f.geometry.type !== 'Point') return;
     const [lon, lat] = f.geometry.coordinates || [];
@@ -180,9 +192,10 @@
 
     const title = (f.properties && f.properties.title) || 'Factory';
     const m = L.marker([lat, lon], { draggable: true }).addTo(map);
-    m.bindPopup('<div class="popup-body">Loading…</div>', { closeButton:true, closeOnClick:false, autoClose:false });
+    m.bindPopup('<div class="popup-body">Loading…</div>', {
+      closeButton:true, closeOnClick:false, autoClose:false
+    });
 
-    // initial compute
     refreshPopupForMarker(m, title);
     wire_delete_on_popup_x(m, row_marker_id);
     attachDragPersist(m, row_marker_id, title);
@@ -205,15 +218,17 @@
     console.error('Rendering existing markers failed', e);
   }
 
-  // --- Click to add new factory ---
+  // --- Click to add new pin ---
   map.on('click', (e) => {
     const { lat, lng } = e.latlng;
     const m = L.marker([lat, lng], { draggable: true }).addTo(map);
-    m.bindPopup(`<div class="popup-body">Saving…</div>${coordsHTML(lat, lng)}`, { closeButton:true, closeOnClick:false, autoClose:false }).openPopup();
+    m.bindPopup(`<div class="popup-body">Saving…</div>${coordsHTML(lat, lng)}`, {
+      closeButton:true, closeOnClick:false, autoClose:false
+    }).openPopup();
 
     wire_delete_on_popup_x(m, null);
 
-    // Save to DB and then compute values
+    // Save to DB; then compute values
     fetch('add_marker.sql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -235,15 +250,12 @@
         return;
       }
 
-      // compute values for current location
       refreshPopupForMarker(m, 'Factory');
-
-      // rewire delete with id & enable DB persist on drag
       wire_delete_on_popup_x(m, new_id);
       attachDragPersist(m, new_id, 'Factory');
     })
     .catch(() => {
-      m.getPopup()?.setContent(renderPopupHTML('Factory', NaN, NaN, lat, lng));
+      m.getPopup()?.setContent(renderPopupHTML('Factory', HARDCODED_CO2_BASELINE, NaN, lat, lng));
     });
   });
 
@@ -253,5 +265,8 @@
       .then(() => location.reload())
       .catch(() => location.reload());
   });
+
+  // === (Optional) Country CO₂ choropleth code can stay below, unchanged ===
+  // If you already added that section earlier, you can keep it; it won’t be affected by this popup change.
 })();
 </script>

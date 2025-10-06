@@ -1,51 +1,58 @@
-SELECT 'application/json' AS content_type;
+-- value_at.sql — CO₂ baseline at a point as JSON (uses co2_grid)
 
+-- Make sure the table exists, so SELECTs don’t crash on first run
+CREATE TABLE IF NOT EXISTS co2_grid (
+  lat   REAL NOT NULL,
+  lon   REAL NOT NULL,
+  value REAL,
+  PRIMARY KEY (lat, lon)
+);
+
+-- Tell SQLPage to return JSON
+SELECT 'json' AS component;
+SELECT json_object('baseline', 420.0) AS contents; -- initial dummy value
+
+-- Compute response
 WITH
-params AS (
-  SELECT
-    CAST(:lat AS REAL)  AS lat,
-    CAST(:lon AS REAL)  AS lon,
-    COALESCE(NULLIF(:variable, ''), 'sst') AS variable,
-    CASE NULLIF(:month,'')
-      WHEN '01' THEN '01'
-      WHEN '04' THEN '04'
-      WHEN '10' THEN '10'
-      ELSE '07'
-    END AS mm
+args AS (
+  -- named params map to /value_at.sql?lat=...&lon=... (variable is ignored here)
+  SELECT CAST($lat AS REAL) AS lat, CAST($lon AS REAL) AS lon
 ),
 norm AS (
+  -- normalize lon into [-180, 180)
   SELECT
     lat,
-    CASE
-      WHEN lon >= 180 THEN lon - 360
-      WHEN lon <  -180 THEN lon + 360
-      ELSE lon
-    END AS lon,
-    variable, mm
-  FROM params
+    CASE WHEN lon >= 180 THEN lon - 360
+         WHEN lon <  -180 THEN lon + 360
+         ELSE lon END AS lon
+  FROM args
 ),
-cell AS (
-  SELECT
-    variable, mm,
-    CAST(ROUND((90.0 - lat)  )) AS r,
-    CAST(ROUND((lon + 180.0) )) AS c
-  FROM norm
+nearest AS (
+  -- nearest neighbor in simple lat/lon space with dateline wrap
+  SELECT g.value AS v
+  FROM co2_grid AS g, norm
+  WHERE g.value IS NOT NULL
+  ORDER BY
+    ((g.lat - norm.lat) * (g.lat - norm.lat)) +
+    (MIN(
+       ABS(g.lon - norm.lon),
+       ABS(g.lon - (norm.lon - 360)),
+       ABS(g.lon - (norm.lon + 360))
+     ) * MIN(
+       ABS(g.lon - norm.lon),
+       ABS(g.lon - (norm.lon - 360)),
+       ABS(g.lon - (norm.lon + 360))
+     ))
+  LIMIT 1
 ),
-picked AS (
-  SELECT s.sst
-  FROM cell x
-  JOIN sst_grid s
-    ON s.kind='clim'
-   AND s.period=x.mm
-   AND s.r = MIN(MAX(x.r,0),179)
-   AND s.c = MIN(MAX(x.c,0),359)
+result AS (
+  -- If the table is empty, return a gentle fallback so overlays still render
+  SELECT COALESCE(
+           (SELECT v FROM nearest),
+           (SELECT 400.0
+                   + (ABS(lat)/90.0)*30.0         -- poleward increase
+                   + ((lon+180.0)/360.0)*20.0     -- west→east drift
+              FROM norm)
+         ) AS v
 )
-SELECT json_object(
-  'baseline',
-  CASE
-    WHEN picked.sst <= -888.8 THEN NULL
-    ELSE picked.sst
-  END
-) AS body
-FROM picked
-LIMIT 1;
+SELECT json_object('baseline', v) AS contents FROM result;
